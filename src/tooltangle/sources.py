@@ -151,11 +151,10 @@ async def load_server(server: ServerConfig, timeout: float = 60) -> list[ToolSpe
     with tempfile.TemporaryFile("w+") as errlog:
         try:
             return await asyncio.wait_for(_list_tools(server, errlog), timeout)
-        except Exception as error:
-            raise SourceError(f"{_describe(error)}{_tail(errlog)}") from error
         except TimeoutError as error:
             raise SourceError(f"no answer within {timeout:.0f}s{_tail(errlog)}") from error
-        
+        except Exception as error:
+            raise SourceError(f"{_describe(error)}{_tail(errlog)}") from error
 
 
 async def _list_tools(server: ServerConfig, errlog: IO[str]) -> list[ToolSpec]:
