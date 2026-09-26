@@ -1,11 +1,22 @@
+import asyncio
 import json
 import os
 import sys
+import tempfile
+from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
-KNOWN_CLIENTS = ("claude-desktop", "claude-code", "cursor", "vscode") # Supported at the moment
+import httpx
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from mcp.client.streamable_http import streamable_http_client
+
+from tooltangle.toolset import EMPTY_PARAMETERS, Toolset, ToolSpec
+
+KNOWN_CLIENTS = ("claude-desktop", "claude-code", "cursor", "vscode")
+
 class SourceError(Exception):
     pass
 
@@ -20,6 +31,11 @@ class ServerConfig:
     url: str | None = None
     headers: dict[str, str] | None = None
 
+@dataclass
+class LoadedTools:
+    toolset: Toolset
+    failures: dict[str, str] = field(default_factory=dict)
+    skipped: dict[str, str] = field(default_factory=dict)
 
 def known_config_paths(client: str) -> list[Path]:
     home = Path.home()
@@ -64,6 +80,7 @@ def parse_server(name: str, entry: dict[str, Any]) -> ServerConfig:
         transport = "stdio" if "command" in entry else "http"
     if transport in ("streamable_http", "streamable-http", "streamableHttp"):
         transport = "http"
+
     if transport == "stdio":
         if not entry.get("command"):
             raise SourceError("stdio server without a command")
@@ -88,3 +105,107 @@ def parse_server(name: str, entry: dict[str, Any]) -> ServerConfig:
             headers={key: str(value) for key, value in entry.get("headers", {}).items()},
         )
     raise SourceError(f"unsupported transport {transport!r}")
+
+
+async def load_tools(source: str, timeout: float = 60) -> LoadedTools:
+    if source in KNOWN_CLIENTS:
+        paths = [path for path in known_config_paths(source) if path.is_file()]
+        if not paths:
+            searched = ", ".join(str(path) for path in known_config_paths(source))
+            raise SourceError(f"no {source} config found (looked at {searched})")
+        return await load_config_files(paths, timeout)
+
+    path = Path(source)
+    if not path.is_file():
+        raise SourceError(f"{source} does not exist")
+    return await load_config_files([path], timeout)
+
+
+async def load_config_files(paths: list[Path], timeout: float) -> LoadedTools:
+    servers: dict[str, ServerConfig] = {}
+    skipped: dict[str, str] = {}
+    for path in paths:
+        found, not_loaded = read_config(path)
+        servers.update({server.name: server for server in found})
+        skipped.update(not_loaded)
+    if not servers and not skipped:
+        raise SourceError(f"no MCP servers in {', '.join(str(path) for path in paths)}")
+    return await load_servers(list(servers.values()), timeout, skipped)
+
+
+async def load_servers(
+    servers: list[ServerConfig], timeout: float = 60, skipped: dict[str, str] | None = None
+) -> LoadedTools:
+    results = await asyncio.gather(
+        *(load_server(server, timeout) for server in servers), return_exceptions=True
+    )
+    tools, failures = [], {}
+    for server, result in zip(servers, results, strict=True):
+        if isinstance(result, BaseException):
+            failures[server.name] = str(result)
+        else:
+            tools.extend(result)
+    return LoadedTools(Toolset(tools), failures, skipped or {})
+
+async def load_server(server: ServerConfig, timeout: float = 60) -> list[ToolSpec]:
+    with tempfile.TemporaryFile("w+") as errlog:
+        try:
+            return await asyncio.wait_for(_list_tools(server, errlog), timeout)
+        except Exception as error:
+            raise SourceError(f"{_describe(error)}{_tail(errlog)}") from error
+        except TimeoutError as error:
+            raise SourceError(f"no answer within {timeout:.0f}s{_tail(errlog)}") from error
+        
+
+
+async def _list_tools(server: ServerConfig, errlog: IO[str]) -> list[ToolSpec]:
+    async with AsyncExitStack() as stack:
+        if server.transport == "stdio":
+            parameters = StdioServerParameters(
+                command=server.command, args=server.args, env=server.env, cwd=server.cwd
+            )
+            read, write = await stack.enter_async_context(stdio_client(parameters, errlog=errlog))
+        else:
+            client = await stack.enter_async_context(
+                httpx.AsyncClient(headers=server.headers, timeout=httpx.Timeout(30, read=300))
+            )
+            read, write, _ = await stack.enter_async_context(
+                streamable_http_client(server.url, http_client=client)
+            )
+        session = await stack.enter_async_context(ClientSession(read, write))
+        await session.initialize()
+
+        tools, cursor = [], None
+        while True:
+            page = await session.list_tools(cursor)
+            tools.extend(page.tools)
+            cursor = page.nextCursor
+            if not cursor:
+                break
+
+    specs = []
+    for tool in tools:
+        data = tool.model_dump(by_alias=True, exclude_none=True)
+        specs.append(
+            ToolSpec(
+                server=server.name,
+                name=data["name"],
+                description=data.get("description", ""),
+                parameters=data.get("inputSchema") or EMPTY_PARAMETERS,
+            )
+        )
+    return specs
+
+def _describe(error: BaseException) -> str:
+    if isinstance(error, BaseExceptionGroup):
+        return "; ".join(_describe(inner) for inner in error.exceptions)
+    if isinstance(error, FileNotFoundError):
+        return f"command not found: {error.filename or error}"
+    return str(error) or type(error).__name__
+
+def _tail(errlog: IO[str], lines: int = 3) -> str:
+    errlog.seek(0)
+    output = [line.strip() for line in errlog.read().splitlines() if line.strip()]
+    if not output:
+        return ""
+    return " | stderr: " + " / ".join(output[-lines:])

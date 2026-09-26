@@ -1,4 +1,5 @@
-from tooltangle.sources import parse_server, read_config
+from tooltangle.sources import load_tools, parse_server, read_config
+
 
 def test_stdio_default_transport():
     server = parse_server("git", {"command": "uvx", "args": ["mcp-server-git"]})
@@ -19,3 +20,17 @@ def test_brokenentries_skipped_not_fatal(write_config):
     servers, skipped = read_config(path)
     assert [server.name for server in servers] == ["ok"]
     assert set(skipped) == {"off", "bad"}
+
+
+async def test_loads_tools_from_real_server(write_config, notes_server, broken_server):
+    path = write_config({"notes": notes_server, "broken": broken_server})
+    loaded = await load_tools(str(path), timeout=30)
+
+    assert loaded.toolset.keys == [
+        "notes.search_notes",
+        "notes.read_note",
+        "notes.create_note",
+        "notes.search_files",
+    ]
+    assert loaded.toolset["notes.create_note"].parameters["required"] == ["title", "body"]
+    assert "API_TOKEN is not set" in loaded.failures["broken"]
