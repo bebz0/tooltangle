@@ -264,4 +264,4 @@ def _import_module(module_path: str):
     try:
         return importlib.import_module(module_path)
     except ImportError as error:
-        raise SourceError(f"can'tt import {module_path}: {error}") from error
+        raise SourceError(f"can't import {module_path}: {error}") from error
