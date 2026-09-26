@@ -11,6 +11,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28.1",
+    "langchain>=1.4.2",
     "mcp>=1.30,<2",
     "pydantic>=2.10",
     "python-dotenv>=1.0",

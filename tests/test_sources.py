@@ -1,4 +1,4 @@
-from tooltangle.sources import load_tools, parse_server, read_config
+from tooltangle.sources import load_tools, parse_server, read_config, load_python_tools
 
 
 def test_stdio_default_transport():
@@ -34,3 +34,20 @@ async def test_loads_tools_from_real_server(write_config, notes_server, broken_s
     ]
     assert loaded.toolset["notes.create_note"].parameters["required"] == ["title", "body"]
     assert "API_TOKEN is not set" in loaded.failures["broken"]
+
+
+def test_loads_python_tools(tmp_path):
+    module = tmp_path / "agent_tools.py"
+    module.write_text(
+        "from langchain_core.tools import tool\n\n"
+        "@tool\n"
+        "def lookup_order(order_id: str) -> str:\n"
+        '    """Find an order by its id."""\n'
+        "    return ''\n\n"
+        "TOOLS = [lookup_order]\n"
+    )
+    specs = load_python_tools(f"{module}:TOOLS")
+    assert [(spec.key, spec.description) for spec in specs] == [
+        ("python.lookup_order", "Find an order by its id.")
+    ]
+    assert "order_id" in specs[0].parameters["properties"]

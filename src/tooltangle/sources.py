@@ -7,6 +7,10 @@ from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Any
+import importlib
+import importlib.util
+from langchain_core.utils.function_calling import convert_to_openai_tool
+
 
 import httpx
 from mcp import ClientSession, StdioServerParameters
@@ -116,9 +120,18 @@ async def load_tools(source: str, timeout: float = 60) -> LoadedTools:
         return await load_config_files(paths, timeout)
 
     path = Path(source)
-    if not path.is_file():
-        raise SourceError(f"{source} does not exist")
-    return await load_config_files([path], timeout)
+    if path.suffix == ".json" or path.is_file():
+        if not path.is_file():
+            raise SourceError(f"{source} does not exist")
+        return await load_config_files([path], timeout)
+
+    if ":" in source:
+        return LoadedTools(Toolset(load_python_tools(source)))
+
+    raise SourceError(
+        f"can't tell what {source!r} is: pass an MCP config file, one of "
+        f"{', '.join(KNOWN_CLIENTS)}, or a Python target like my_agent.tools:TOOLS"
+    )
 
 
 async def load_config_files(paths: list[Path], timeout: float) -> LoadedTools:
@@ -146,6 +159,7 @@ async def load_servers(
         else:
             tools.extend(result)
     return LoadedTools(Toolset(tools), failures, skipped or {})
+
 
 async def load_server(server: ServerConfig, timeout: float = 60) -> list[ToolSpec]:
     with tempfile.TemporaryFile("w+") as errlog:
@@ -195,6 +209,7 @@ async def _list_tools(server: ServerConfig, errlog: IO[str]) -> list[ToolSpec]:
         )
     return specs
 
+
 def _describe(error: BaseException) -> str:
     if isinstance(error, BaseExceptionGroup):
         return "; ".join(_describe(inner) for inner in error.exceptions)
@@ -202,9 +217,51 @@ def _describe(error: BaseException) -> str:
         return f"command not found: {error.filename or error}"
     return str(error) or type(error).__name__
 
+
 def _tail(errlog: IO[str], lines: int = 3) -> str:
     errlog.seek(0)
     output = [line.strip() for line in errlog.read().splitlines() if line.strip()]
     if not output:
         return ""
     return " | stderr: " + " / ".join(output[-lines:])
+
+
+def load_python_tools(target: str) -> list[ToolSpec]:
+    module_path, _, attribute = target.rpartition(":")
+    module = _import_module(module_path)
+    try:
+        tools = getattr(module, attribute)
+    except AttributeError as error:
+        raise SourceError(f"{module_path} has no attribute {attribute!r}") from error
+
+    specs = []
+    for tool in tools:
+        function = convert_to_openai_tool(tool)["function"]
+        specs.append(
+            ToolSpec(
+                server="python",
+                name=function["name"],
+                description=function.get("description", ""),
+                parameters=function.get("parameters") or EMPTY_PARAMETERS,
+            )
+        )
+    return specs
+
+
+def _import_module(module_path: str):
+    if module_path.endswith(".py") or "/" in module_path:
+        path = Path(module_path)
+        if not path.is_file():
+            raise SourceError(f"{module_path} does not exist")
+        spec = importlib.util.spec_from_file_location(path.stem, path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[path.stem] = module
+        spec.loader.exec_module(module)
+        return module
+
+    if str(Path.cwd()) not in sys.path:
+        sys.path.insert(0, str(Path.cwd()))
+    try:
+        return importlib.import_module(module_path)
+    except ImportError as error:
+        raise SourceError(f"can'tt import {module_path}: {error}") from error
