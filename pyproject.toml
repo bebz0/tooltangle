@@ -16,6 +16,7 @@ dependencies = [
     "pydantic>=2.10",
     "python-dotenv>=1.0",
     "rich>=15",
+    "scikit-learn>=1.9.1",
     "typer>=0.27",
 ]
 
@@ -44,6 +45,10 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 [tool.mypy]
 strict = true
 files = ["src"]
+
+[[tool.mypy.overrides]]
+module = ["sklearn.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -4,6 +4,9 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
 from tooltangle.toolset import Toolset
 
 LARGE_DEFINITIONS = 10_000
@@ -83,3 +86,28 @@ def static_findings(toolset: Toolset) -> list[Finding]:
             )
         )
     return findings
+
+
+def tool_document(name: str, description: str) -> str:
+    words = re.sub(r"([a-z])([A-Z])", r"\1 \2", name).replace("_", " ").replace("-", " ")
+    return f"{words} {description}"
+
+
+def lookalike_pairs(
+    toolset: Toolset, threshold: float = 0.35, limit: int = 10
+) -> list[tuple[str, str, float]]:
+    if len(toolset) < 2:
+        return []
+    documents = [tool_document(tool.name, tool.description) for tool in toolset]
+    matrix = TfidfVectorizer(stop_words="english", sublinear_tf=True).fit_transform(documents)
+    scores = cosine_similarity(matrix)
+
+    keys = toolset.keys
+    pairs = [
+        (keys[i], keys[j], float(scores[i, j]))
+        for i in range(len(keys))
+        for j in range(i + 1, len(keys))
+        if scores[i, j] >= threshold
+    ]
+    pairs.sort(key=lambda pair: pair[2], reverse=True)
+    return pairs[:limit]

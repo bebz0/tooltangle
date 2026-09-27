@@ -39,6 +39,14 @@ def print_findings(console: Console, findings: list[Finding]) -> None:
             console.print(f"       [dim]e.g.[/dim] {shown}", highlight=False)
 
 
+def print_lookalikes(console: Console, pairs: list[tuple[str, str, float]]) -> None:
+    if not pairs:
+        return
+    console.print("\n[bold]look-alike descriptions[/bold] [dim](text similarity only)[/dim]")
+    for first, second, score in pairs:
+        console.print(f"  {score:.2f}  {first} ~ {second}", highlight=False)
+
+
 def print_tool_list(console: Console, loaded: LoadedTools) -> None:
     table = Table(box=None, pad_edge=False, show_header=True, header_style="dim")
     table.add_column("tool", no_wrap=True)

@@ -5,8 +5,8 @@ import typer
 from rich.console import Console
 
 from tooltangle import __version__
-from tooltangle.findings import static_findings
-from tooltangle.render import print_findings, print_sources, print_tool_list
+from tooltangle.findings import lookalike_pairs, static_findings
+from tooltangle.render import print_findings, print_lookalikes, print_sources, print_tool_list
 from tooltangle.sources import KNOWN_CLIENTS, LoadedTools, SourceError, load_tools
 
 app = typer.Typer(
@@ -71,3 +71,4 @@ def tools(
         console.print()
         print_tool_list(console, loaded)
     print_findings(console, static_findings(loaded.toolset))
+    print_lookalikes(console, lookalike_pairs(loaded.toolset))
