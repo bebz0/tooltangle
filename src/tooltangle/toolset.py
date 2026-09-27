@@ -4,6 +4,7 @@ import re
 from collections import Counter
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field, replace
+from typing import Any
 
 EMPTY_PARAMETERS = {"type": "object", "properties": {}}
 
@@ -13,7 +14,7 @@ class ToolSpec:
     server: str
     name: str
     description: str
-    parameters: dict = field(default_factory=dict, compare=False)
+    parameters: dict[str, Any] = field(default_factory=dict, compare=False)
 
     @property
     def key(self) -> str:
@@ -56,7 +57,7 @@ class Toolset:
     def key_for(self, function_name: str) -> str | None:
         return self._keys_by_function_name.get(function_name)
 
-    def function_schemas(self) -> list[dict]:
+    def function_schemas(self) -> list[dict[str, Any]]:
         return [
             {
                 "type": "function",

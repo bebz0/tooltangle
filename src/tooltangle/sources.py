@@ -8,7 +8,8 @@ import tempfile
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import IO, Any
+from types import ModuleType
+from typing import IO, Any, TextIO
 
 import httpx
 from langchain_core.utils.function_calling import convert_to_openai_tool
@@ -174,14 +175,16 @@ async def load_server(server: ServerConfig, timeout: float = 60) -> list[ToolSpe
             raise SourceError(f"{_describe(error)}{_tail(errlog)}") from error
 
 
-async def _list_tools(server: ServerConfig, errlog: IO[str]) -> list[ToolSpec]:
+async def _list_tools(server: ServerConfig, errlog: TextIO) -> list[ToolSpec]:
     async with AsyncExitStack() as stack:
         if server.transport == "stdio":
+            assert server.command is not None  # parse_server guarantees it
             parameters = StdioServerParameters(
                 command=server.command, args=server.args, env=server.env, cwd=server.cwd
             )
             read, write = await stack.enter_async_context(stdio_client(parameters, errlog=errlog))
         else:
+            assert server.url is not None  # parse_server guarantees it
             client = await stack.enter_async_context(
                 httpx.AsyncClient(headers=server.headers, timeout=httpx.Timeout(30, read=300))
             )
@@ -251,12 +254,14 @@ def load_python_tools(target: str) -> list[ToolSpec]:
     return specs
 
 
-def _import_module(module_path: str):
+def _import_module(module_path: str) -> ModuleType:
     if module_path.endswith(".py") or "/" in module_path:
         path = Path(module_path)
         if not path.is_file():
             raise SourceError(f"{module_path} does not exist")
         spec = importlib.util.spec_from_file_location(path.stem, path)
+        if spec is None or spec.loader is None:
+            raise SourceError(f"can't load {module_path}")
         module = importlib.util.module_from_spec(spec)
         sys.modules[path.stem] = module
         spec.loader.exec_module(module)

@@ -14,7 +14,7 @@ def label(name: str) -> str:
     return f"[dim]{name:<9}[/dim]"
 
 
-def print_sources(console: Console, loaded: LoadedTools):
+def print_sources(console: Console, loaded: LoadedTools) -> None:
     per_server = Counter(tool.server for tool in loaded.toolset)
     servers = " · ".join(f"{server} {count}" for server, count in per_server.items())
     console.print(f"{label('servers')} {servers or 'none'}")
@@ -28,7 +28,7 @@ def print_sources(console: Console, loaded: LoadedTools):
         console.print(f"{label('skipped')} {server}: {reason}", highlight=False)
 
 
-def print_findings(console: Console, findings: list[Finding]):
+def print_findings(console: Console, findings: list[Finding]) -> None:
     for finding in findings:
         style = SEVERITY_STYLES[finding.severity]
         tag = f"[{style}]{finding.severity.upper():<6}[/{style}]"
@@ -39,7 +39,7 @@ def print_findings(console: Console, findings: list[Finding]):
             console.print(f"       [dim]e.g.[/dim] {shown}", highlight=False)
 
 
-def print_tool_list(console: Console, loaded: LoadedTools):
+def print_tool_list(console: Console, loaded: LoadedTools) -> None:
     table = Table(box=None, pad_edge=False, show_header=True, header_style="dim")
     table.add_column("tool", no_wrap=True)
     table.add_column("description", overflow="fold")

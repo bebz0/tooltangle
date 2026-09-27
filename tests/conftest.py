@@ -1,10 +1,14 @@
 import json
+import os
 import sys
 from pathlib import Path
 
 import pytest
 
 SERVERS = Path(__file__).parent / "servers"
+
+os.environ.pop("FORCE_COLOR", None)
+os.environ["COLUMNS"] = "200"
 
 
 @pytest.fixture
