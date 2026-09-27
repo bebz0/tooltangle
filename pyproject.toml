@@ -19,6 +19,9 @@ dependencies = [
     "typer>=0.27",
 ]
 
+[project.scripts]
+tooltangle = "tooltangle.cli:app"
+
 [build-system]
 requires = ["uv_build>=0.12.7,<0.13.0"]
 build-backend = "uv_build"
