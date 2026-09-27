@@ -7,6 +7,7 @@ from dataclasses import dataclass, field, replace
 
 EMPTY_PARAMETERS = {"type": "object", "properties": {}}
 
+
 @dataclass(frozen=True)
 class ToolSpec:
     server: str
@@ -17,6 +18,7 @@ class ToolSpec:
     @property
     def key(self) -> str:
         return f"{self.server}.{self.name}"
+
 
 class Toolset:
     def __init__(self, tools: list[ToolSpec]):
@@ -89,6 +91,7 @@ class Toolset:
             description = " ".join(tool.description.split()) or "(no description)"
             lines.append(f"- {self.function_names[tool.key]}({arguments}): {description}")
         return "\n".join(lines)
+
 
 def _function_name(name: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9_-]", "_", name)

@@ -1,6 +1,7 @@
 from tooltangle.findings import Severity, static_findings
 from tooltangle.toolset import Toolset, ToolSpec
 
+
 def test_static_checks():
     toolset = Toolset(
         [

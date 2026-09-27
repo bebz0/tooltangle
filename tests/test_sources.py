@@ -1,4 +1,4 @@
-from tooltangle.sources import load_tools, parse_server, read_config, load_python_tools
+from tooltangle.sources import load_python_tools, load_tools, parse_server, read_config
 
 
 def test_stdio_default_transport():

@@ -9,10 +9,12 @@ from tooltangle.toolset import Toolset
 LARGE_DEFINITIONS = 10_000
 SHORT_DESCRIPTION = 20
 
+
 class Severity(StrEnum):
     ERROR = "error"
     WARN = "warn"
     INFO = "info"
+
 
 @dataclass
 class Finding:
@@ -22,6 +24,7 @@ class Finding:
     detail: str = ""
     examples: list[str] = field(default_factory=list)
     tools: tuple[str, ...] = ()
+
 
 def estimate_definition_tokens(toolset: Toolset) -> int:
     return len(json.dumps(toolset.function_schemas(), ensure_ascii=False)) // 5

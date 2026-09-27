@@ -10,6 +10,7 @@ def make_toolset() -> Toolset:
         ]
     )
 
+
 def test_duplicate_names_get_server_prefix():
     toolset = make_toolset()
     assert toolset.function_names == {
@@ -20,6 +21,7 @@ def test_duplicate_names_get_server_prefix():
     assert toolset.key_for("files_search") == "files.search"
     assert toolset.key_for("read_note") == "notes.read_note"
     assert toolset.key_for("made_up") is None
+
 
 def test_fingerprint_follows_descriptions():
     toolset = make_toolset()

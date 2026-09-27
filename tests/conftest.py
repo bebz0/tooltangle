@@ -6,13 +6,16 @@ import pytest
 
 SERVERS = Path(__file__).parent / "servers"
 
+
 @pytest.fixture
 def notes_server() -> dict:
     return {"command": sys.executable, "args": [str(SERVERS / "notes_server.py")]}
 
+
 @pytest.fixture
 def broken_server() -> dict:
     return {"command": sys.executable, "args": [str(SERVERS / "broken_server.py")]}
+
 
 @pytest.fixture
 def write_config(tmp_path):
@@ -20,4 +23,5 @@ def write_config(tmp_path):
         path = tmp_path / name
         path.write_text(json.dumps({key: servers}))
         return path
+
     return write
