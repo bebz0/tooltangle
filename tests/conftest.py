@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+sys.path.insert(0, str(Path(__file__).parent))
+
 SERVERS = Path(__file__).parent / "servers"
 
 os.environ.pop("FORCE_COLOR", None)

@@ -1,9 +1,13 @@
 import asyncio
+import hashlib
+import json
 import logging
+import sqlite3
 import time
 import warnings
 from collections import defaultdict
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from langchain.chat_models import init_chat_model
@@ -49,6 +53,43 @@ def create_model(spec: str, **options: Any) -> BaseChatModel:
     return model
 
 
+def cache_key(*parts: Any) -> str:
+    payload = json.dumps(parts, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+class Cache:
+    def __init__(self, path: Path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.connection = sqlite3.connect(path)
+        self.connection.execute("PRAGMA journal_mode=WAL")
+        self.connection.execute(
+            "CREATE TABLE IF NOT EXISTS responses (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+        )
+
+    def get(self, key: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT value FROM responses WHERE key = ?", (key,)
+        ).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def put(self, key: str, value: dict[str, Any]) -> None:
+        self.connection.execute(
+            "INSERT OR REPLACE INTO responses (key, value) VALUES (?, ?)",
+            (key, json.dumps(value, ensure_ascii=False)),
+        )
+        self.connection.commit()
+
+    def close(self) -> None:
+        self.connection.close()
+
+    def __enter__(self) -> "Cache":
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.close()
+
+
 class Pacer:
     def __init__(self, requests_per_minute: float):
         self.interval = 60 / requests_per_minute
@@ -67,6 +108,7 @@ class Pacer:
 @dataclass
 class Usage:
     calls: int = 0
+    cached: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
 
@@ -83,6 +125,9 @@ class UsageLog:
         if metadata:
             usage.input_tokens += metadata["input_tokens"]
             usage.output_tokens += metadata["output_tokens"]
+
+    def record_cached(self, phase: str, spec: str) -> None:
+        self.entries[(phase, spec)].cached += 1
 
     def price(self, spec: str) -> tuple[float, float] | None:
         return self.prices.get(spec) or self.prices.get(model_name(spec))
@@ -108,12 +153,14 @@ class ModelClient:
         self,
         spec: str,
         usage: UsageLog,
+        cache: Cache | None = None,
         requests_per_minute: float = 60,
         model: BaseChatModel | None = None,
         **options: Any,
     ):
         self.spec = spec
         self.usage = usage
+        self.cache = cache
         self.model = model or create_model(spec, **options)
         self.pacer = Pacer(requests_per_minute)
 
@@ -130,7 +177,21 @@ class ModelClient:
             raise ModelError(f"{self.spec} failed: {error}") from error
         return result, time.perf_counter() - started
 
+    def cached_answer[T: BaseModel](self, schema: type[T], prompt: str, phase: str) -> T | None:
+        if self.cache is None:
+            return None
+        hit = self.cache.get(cache_key("ask", self.spec, schema.model_json_schema(), prompt))
+        if hit is None:
+            return None
+        self.usage.record_cached(phase, self.spec)
+        return schema.model_validate(hit["parsed"])
+
     async def ask[T: BaseModel](self, schema: type[T], prompt: str, phase: str) -> T:
+        cached = self.cached_answer(schema, prompt, phase)
+        if cached is not None:
+            return cached
+
+        key = cache_key("ask", self.spec, schema.model_json_schema(), prompt)
         runnable = self.model.with_structured_output(schema, include_raw=True)
         last_error = None
         for _ in range(3):
@@ -138,6 +199,8 @@ class ModelClient:
             self.usage.record(phase, self.spec, result["raw"])
             parsed = result["parsed"]
             if isinstance(parsed, schema):
+                if self.cache is not None:
+                    self.cache.put(key, {"parsed": parsed.model_dump()})
                 return parsed
             last_error = result.get("parsing_error")
         raise ModelError(f"{self.spec} did not return a valid {schema.__name__}: {last_error}")

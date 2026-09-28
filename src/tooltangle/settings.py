@@ -29,6 +29,10 @@ class Settings(BaseModel):
     state_dir: Path = Path(".tooltangle")
     prices: dict[str, tuple[float, float]] = Field(default_factory=dict)
 
+    @property
+    def cache_path(self) -> Path:
+        return self.state_dir / "cache.sqlite"
+
 
 def load_settings(path: Path = Path("tooltangle.toml"), **overrides: Any) -> Settings:
     data = {}
