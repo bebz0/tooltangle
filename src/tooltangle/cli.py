@@ -1,7 +1,9 @@
 import asyncio
+from pathlib import Path
 from typing import Annotated, NoReturn
 
 import typer
+from dotenv import load_dotenv
 from rich.console import Console
 
 from tooltangle import __version__
@@ -39,7 +41,7 @@ def main(
         typer.Option("--version", callback=show_version, is_eager=True, help="Show the version."),
     ] = False,
 ) -> None:
-    pass
+    load_dotenv(Path.cwd() / ".env")
 
 
 def fail(message: str, code: int = 2) -> NoReturn:
