@@ -30,6 +30,10 @@ class Settings(BaseModel):
     prices: dict[str, tuple[float, float]] = Field(default_factory=dict)
 
     @property
+    def dataset_path(self) -> Path:
+        return self.state_dir / "queries.jsonl"
+
+    @property
     def cache_path(self) -> Path:
         return self.state_dir / "cache.sqlite"
 
