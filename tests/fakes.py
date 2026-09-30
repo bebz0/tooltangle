@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
@@ -6,6 +7,26 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import RunnableLambda
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import Field
+
+from tooltangle.generation import Labels, Requests, RequestsByTool, ToolRequests
+
+PHRASES = {
+    "search_notes": "find what I jotted down about",
+    "read_note": "open my memo titled",
+    "create_note": "write down a fresh entry on",
+    "search_files": "locate documents on disk matching",
+    "send_email": "shoot a message to",
+}
+SUBJECTS = [
+    "taxes",
+    "the garden",
+    "my trip to Rome",
+    "quarterly budget",
+    "dentist visit",
+    "birthday party",
+    "car repair",
+    "the new laptop",
+]
 
 
 def usage(input_tokens: int = 100, output_tokens: int = 10) -> dict:
@@ -52,3 +73,32 @@ class FakeChatModel(BaseChatModel):
             return parsed
 
         return RunnableLambda(respond)
+
+
+def requested_functions(prompt: str) -> list[str]:
+    line = prompt.split("For each of these tools:")[1].splitlines()[0]
+    return re.findall(r"`(\w+)`", line)
+
+
+def fake_generator(schema, prompt: str):
+    count = re.search(r"write (\d+)", prompt, re.IGNORECASE)
+    count = int(count.group(1)) if count else 0
+    if schema is Requests:
+        jokes = [f"tell me a joke about {subject}" for subject in SUBJECTS]
+        return Requests(requests=jokes[:count])
+    if schema is RequestsByTool:
+        items = []
+        for function in requested_functions(prompt):
+            texts = [f"{PHRASES[function]} {subject}" for subject in SUBJECTS[: count - 1]]
+            texts.append(f"please run {function} now")
+            items.append(ToolRequests(tool=function, requests=texts))
+        return RequestsByTool(tools=items)
+    if schema is Labels:
+        labels = []
+        for number, text in re.findall(r"^(\d+)\. (.+)$", prompt, re.MULTILINE):
+            tools = [name for name, phrase in PHRASES.items() if phrase in text]
+            if "dentist" in text:
+                tools = []
+            labels.append({"number": int(number), "tools": tools})
+        return Labels(labels=labels)
+    raise AssertionError(schema)
