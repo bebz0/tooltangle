@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from tooltangle import prompts
 from tooltangle.dataset import Dataset, DatasetInfo, Kind, Query, assign_splits, query_id
+from tooltangle.findings import lookalike_pairs
 from tooltangle.models import ModelClient
 from tooltangle.settings import Settings
 from tooltangle.toolset import Toolset
@@ -31,6 +32,20 @@ class RequestsByTool(BaseModel):
     tools: list[ToolRequests]
 
 
+class ContrastRequests(BaseModel):
+    first: list[str] = Field(description="Messages where the first tool is the best first step")
+    second: list[str] = Field(description="Messages where the second tool is the best first step")
+
+
+class ToolPair(BaseModel):
+    first: str
+    second: str
+
+
+class ToolPairs(BaseModel):
+    pairs: list[ToolPair]
+
+
 class Label(BaseModel):
     number: int
     tools: list[str]
@@ -45,6 +60,7 @@ class Draft:
     text: str
     tool: str | None
     kind: Kind
+    against: str | None = None
 
 
 @dataclass
@@ -52,6 +68,7 @@ class GenerationReport:
     generated: int = 0
     kept: int = 0
     dropped: Counter[str] = field(default_factory=Counter)
+    pairs: list[tuple[str, str]] = field(default_factory=list)
 
 
 LABELING_VERSION = hashlib.sha256(prompts.LABELS.encode()).hexdigest()[:12]
@@ -78,9 +95,12 @@ class QueryGenerator:
 
     async def build(self) -> tuple[Dataset, GenerationReport]:
         report = GenerationReport()
+        report.pairs = await self.confusable_pairs()
+
         keys = self.toolset.keys
         batches = [keys[start : start + PLAIN_BATCH] for start in range(0, len(keys), PLAIN_BATCH)]
         jobs = [self.plain_queries(batch) for batch in batches]
+        jobs += [self.contrast_queries(first, second) for first, second in report.pairs]
         total = no_tool_count(self.settings, len(self.toolset))
         for start in range(0, total, NO_TOOL_BATCH):
             jobs.append(self.no_tool_queries(min(NO_TOOL_BATCH, total - start)))
@@ -128,12 +148,43 @@ class QueryGenerator:
                 drafts += [Draft(text, key, "plain") for text in item.requests[:count]]
         return drafts
 
+    async def contrast_queries(self, first: str, second: str) -> list[Draft]:
+        count = self.settings.queries_per_contrast
+        prompt = prompts.CONTRAST_QUERIES.format(
+            catalog=self.catalog,
+            count=count,
+            first=self.function(first),
+            second=self.function(second),
+            language=self.settings.language,
+        )
+        answer = await self.ask(ContrastRequests, prompt, "generate")
+        return [Draft(text, first, "contrast", second) for text in answer.first[:count]] + [
+            Draft(text, second, "contrast", first) for text in answer.second[:count]
+        ]
+
     async def no_tool_queries(self, count: int) -> list[Draft]:
         prompt = prompts.NO_TOOL_QUERIES.format(
             catalog=self.catalog, count=count, language=self.settings.language
         )
         answer = await self.ask(Requests, prompt, "generate")
         return [Draft(text, None, "no_tool") for text in answer.requests[:count]]
+
+    async def confusable_pairs(self) -> list[tuple[str, str]]:
+        limit = self.settings.contrast_pairs
+        prompt = prompts.CONFUSABLE_PAIRS.format(catalog=self.catalog, limit=limit)
+        answer = await self.ask(ToolPairs, prompt, "generate")
+
+        pairs = []
+        for pair in answer.pairs:
+            first, second = self.toolset.key_for(pair.first), self.toolset.key_for(pair.second)
+            if first and second and first != second:
+                pairs.append((first, second))
+        pairs += [(first, second) for first, second, _ in lookalike_pairs(self.toolset)]
+
+        unique: dict[frozenset[str], tuple[str, str]] = {}
+        for first, second in pairs:
+            unique.setdefault(frozenset((first, second)), (first, second))
+        return list(unique.values())[:limit]
 
     def clean(self, drafts: list[Draft], report: GenerationReport) -> list[Draft]:
         seen = set()
@@ -178,6 +229,7 @@ class QueryGenerator:
             tool=draft.tool,
             accepted=sorted(labeled),
             kind=draft.kind,
+            against=draft.against,
         )
 
     async def labels_for(self, texts: list[str]) -> list[set[str] | None]:

@@ -8,7 +8,15 @@ from langchain_core.runnables import RunnableLambda
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import Field
 
-from tooltangle.generation import Labels, Requests, RequestsByTool, ToolRequests
+from tooltangle.generation import (
+    ContrastRequests,
+    Labels,
+    Requests,
+    RequestsByTool,
+    ToolPair,
+    ToolPairs,
+    ToolRequests,
+)
 
 PHRASES = {
     "search_notes": "find what I jotted down about",
@@ -27,6 +35,8 @@ SUBJECTS = [
     "car repair",
     "the new laptop",
 ]
+
+CONFUSING = ("taxes", "garden", "Rome", "budget", "birthday", "car repair")
 
 
 def usage(input_tokens: int = 100, output_tokens: int = 10) -> dict:
@@ -75,6 +85,20 @@ class FakeChatModel(BaseChatModel):
         return RunnableLambda(respond)
 
 
+def pick_by_phrase(text: str, tools: list[dict]) -> str | None:
+    return next((name for name, phrase in PHRASES.items() if phrase in text), None)
+
+
+def confused_picker(text: str, tools: list[dict]) -> str | None:
+    # sends notes requests to search_files until the description of search_notes says "jotted"
+    picked = pick_by_phrase(text, tools)
+    descriptions = {tool["function"]["name"]: tool["function"]["description"] for tool in tools}
+    misleading = "jotted" not in descriptions.get("search_notes", "")
+    if picked == "search_notes" and misleading and any(word in text for word in CONFUSING):
+        return "search_files"
+    return picked
+
+
 def requested_functions(prompt: str) -> list[str]:
     line = prompt.split("For each of these tools:")[1].splitlines()[0]
     return re.findall(r"`(\w+)`", line)
@@ -83,6 +107,15 @@ def requested_functions(prompt: str) -> list[str]:
 def fake_generator(schema, prompt: str):
     count = re.search(r"write (\d+)", prompt, re.IGNORECASE)
     count = int(count.group(1)) if count else 0
+    if schema is ToolPairs:
+        return ToolPairs(pairs=[ToolPair(first="search_notes", second="search_files")])
+    if schema is ContrastRequests:
+        first, second = re.search(r"mix up: `(\w+)` and `(\w+)`", prompt).groups()
+        tag = "(more)" if "already exist" in prompt else "(tricky)"
+        return ContrastRequests(
+            first=[f"{PHRASES[first]} {subject} {tag}" for subject in SUBJECTS[:count]],
+            second=[f"{PHRASES[second]} {subject} {tag}" for subject in SUBJECTS[:count]],
+        )
     if schema is Requests:
         jokes = [f"tell me a joke about {subject}" for subject in SUBJECTS]
         return Requests(requests=jokes[:count])

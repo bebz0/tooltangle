@@ -30,11 +30,15 @@ async def test_builds_a_labeled_dataset():
 
     by_kind = {
         kind: [query for query in dataset.queries if query.kind == kind]
-        for kind in ("plain", "no_tool")
+        for kind in ("plain", "contrast", "no_tool")
     }
     assert {query.tool for query in by_kind["plain"]} == set(toolset.keys)
     assert all(query.accepted == [query.tool] for query in by_kind["plain"])
     assert all(query.accepted == [] for query in by_kind["no_tool"])
+    assert report.pairs[0] == ("notes.search_notes", "files.search_files")
+    assert {frozenset((q.tool, q.against)) for q in by_kind["contrast"]} == {
+        frozenset(pair) for pair in report.pairs
+    }
     assert report.dropped["names the tool"] == 3
     assert report.dropped["labeler disagrees"] > 0
     for key in toolset.keys:

@@ -17,6 +17,23 @@ descriptions.
 - Every message must differ from the others in intent or wording.
 - Write the messages in {language}."""
 
+CONTRAST_QUERIES = """\
+You are building a test set for an AI assistant that can call tools.
+These are all the tools the assistant can see:
+
+{catalog}
+
+Two of them are easy to mix up: `{first}` and `{second}`.
+
+Write {count} messages where the best first step is `{first}`, and {count} messages \
+where the best first step is `{second}`. Make them tricky: each message should touch \
+the domain of the other tool, so that only a careful reading of both descriptions \
+routes it correctly. On reflection the right tool must still be clearly better.
+
+- Never mention any tool by name.
+- Sound like real users and include concrete details when natural.
+- Write the messages in {language}."""
+
 NO_TOOL_QUERIES = """\
 These are all the tools an AI assistant can see:
 
@@ -30,6 +47,16 @@ explanation, for example how something works;
 - requests that sound related but that none of these tools can actually do.
 
 Write the messages in {language}."""
+
+CONFUSABLE_PAIRS = """\
+These are all the tools an AI assistant can see:
+
+{catalog}
+
+Which pairs of tools could a model confuse when deciding which one to call? Only list \
+pairs whose purposes genuinely overlap or are easy to mix up from their descriptions, \
+most confusable first. Return at most {limit} pairs and use the tool names exactly as \
+written above."""
 
 LABELS = """\
 These are all the tools an AI assistant can see:
