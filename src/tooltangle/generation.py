@@ -5,6 +5,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 
 from pydantic import BaseModel, Field
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 from tooltangle import prompts
 from tooltangle.dataset import Dataset, DatasetInfo, Kind, Query, assign_splits, query_id
@@ -17,6 +19,20 @@ PLAIN_BATCH = 4
 LABEL_BATCH = 50
 NO_TOOL_BATCH = 25
 NO_TOOL_SHARE = 0.1
+PARROT_THRESHOLD = 0.6
+DUPLICATE_THRESHOLD = 0.85
+
+
+def similarity_to_references(texts: list[str], references: list[str]) -> list[float]:
+    if not texts:
+        return []
+    vectorizer = TfidfVectorizer(stop_words="english", sublinear_tf=True)
+    matrix = vectorizer.fit_transform(texts + references)
+    text_vectors, reference_vectors = matrix[: len(texts)], matrix[len(texts) :]
+    return [
+        float(cosine_similarity(text_vectors[i], reference_vectors[i])[0, 0])
+        for i in range(len(texts))
+    ]
 
 
 class Requests(BaseModel):
@@ -200,7 +216,42 @@ class QueryGenerator:
             seen.add(text.casefold())
             cleaned.append(replace(draft, text=text))
 
-        return cleaned
+        with_tool = [draft for draft in cleaned if draft.tool]
+        scores = similarity_to_references(
+            [draft.text for draft in with_tool],
+            [self.toolset[draft.tool].description for draft in with_tool if draft.tool],
+        )
+        parrots = {
+            id(draft)
+            for draft, score in zip(with_tool, scores, strict=True)
+            if score >= PARROT_THRESHOLD
+        }
+        if parrots:
+            report.dropped["copies the description"] += len(parrots)
+        cleaned = [draft for draft in cleaned if id(draft) not in parrots]
+
+        return self.drop_near_duplicates(cleaned, report)
+
+    def drop_near_duplicates(self, drafts: list[Draft], report: GenerationReport) -> list[Draft]:
+        groups: dict[tuple[str | None, Kind], list[Draft]] = {}
+        for draft in drafts:
+            groups.setdefault((draft.tool, draft.kind), []).append(draft)
+
+        kept = []
+        for group in groups.values():
+            if len(group) < 2:
+                kept.extend(group)
+                continue
+            matrix = TfidfVectorizer().fit_transform([draft.text for draft in group])
+            scores = cosine_similarity(matrix)
+            chosen: list[int] = []
+            for index in range(len(group)):
+                if all(scores[index, other] < DUPLICATE_THRESHOLD for other in chosen):
+                    chosen.append(index)
+                else:
+                    report.dropped["near duplicate"] += 1
+            kept.extend(group[index] for index in chosen)
+        return kept
 
     async def label(self, drafts: list[Draft], report: GenerationReport) -> list[Query]:
         labels = await self.labels_for([draft.text for draft in drafts])
