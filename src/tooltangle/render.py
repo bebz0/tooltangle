@@ -3,7 +3,11 @@ from collections import Counter
 from rich.console import Console
 from rich.table import Table
 
+from tooltangle.dataset import Dataset
 from tooltangle.findings import Finding, Severity, estimate_definition_tokens
+from tooltangle.generation import GenerationReport
+from tooltangle.metrics import Evaluation
+from tooltangle.models import UsageLog, model_name
 from tooltangle.sources import LoadedTools
 
 EXAMPLE_WIDTH = 120
@@ -55,3 +59,52 @@ def print_tool_list(console: Console, loaded: LoadedTools) -> None:
         first_line = tool.description.strip().splitlines()[0] if tool.description.strip() else ""
         table.add_row(tool.key, first_line)
     console.print(table)
+
+
+def print_generation(console: Console, report: GenerationReport | None, dataset: Dataset) -> None:
+    if report is not None:
+        dropped = ", ".join(f"{reason} {count}" for reason, count in report.dropped.most_common())
+        console.print(
+            f"{label('messages')} wrote {report.generated}, kept {report.kept}"
+            + (f"  [dim](dropped: {dropped})[/dim]" if dropped else "")
+        )
+    splits = Counter(query.split for query in dataset.queries)
+    console.print(
+        f"{label('dataset')} {len(dataset.queries)} messages "
+        f"[dim](dev {splits['dev']} · holdout {splits['holdout']})[/dim]"
+    )
+
+
+def print_summary(console: Console, evaluation: Evaluation) -> None:
+    low, high = evaluation.interval
+    scored = [score for score in evaluation.tools.values() if score.total]
+    good = sum(score.accuracy >= 0.9 for score in scored)
+    console.print(
+        f"\n[green]{'OK':<6}[/green] {good} of {len(scored)} tools picked correctly 90%+ "
+        f"of the time"
+    )
+    console.print(
+        f"\n{label('accuracy')} [bold]{evaluation.accuracy:.2f}[/bold] "
+        f"[dim][{low:.2f}, {high:.2f}][/dim] on {evaluation.total} messages "
+        f"with {model_name(evaluation.model)}"
+    )
+
+
+def print_usage(console: Console, usage: UsageLog) -> None:
+    parts = []
+    for (phase, spec), entry in usage.entries.items():
+        if not entry.calls and not entry.cached:
+            continue
+        cached = f" + {entry.cached} cached" if entry.cached else ""
+        calls = "call" if entry.calls + entry.cached == 1 else "calls"
+        parts.append(
+            f"{phase} {entry.calls}{cached} {calls} to {model_name(spec)} "
+            f"[dim]({entry.input_tokens:,} in · {entry.output_tokens:,} out)[/dim]"
+        )
+    if not parts:
+        return
+    console.print(f"{label('usage')} " + f"\n{' ' * 10}".join(parts))
+    cost = usage.total_cost()
+    if cost:
+        amount = "< $0.01" if cost < 0.01 else f"≈ ${cost:.2f}"
+        console.print(f"{' ' * 10}[dim]{amount} at paid-tier prices[/dim]")

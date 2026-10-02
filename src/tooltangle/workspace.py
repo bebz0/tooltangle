@@ -1,0 +1,71 @@
+from collections.abc import Callable
+
+from tooltangle.dataset import Dataset, Query
+from tooltangle.generation import GenerationReport, QueryGenerator
+from tooltangle.models import Cache, ModelClient, UsageLog
+from tooltangle.runner import Pick, Runner
+from tooltangle.settings import Settings
+from tooltangle.toolset import Toolset
+
+STATE_GITIGNORE = "cache.sqlite*\nreport.json\n"
+
+
+class Workspace:
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self.usage = UsageLog(settings.prices)
+        settings.state_dir.mkdir(parents=True, exist_ok=True)
+        gitignore = settings.state_dir / ".gitignore"
+        if not gitignore.exists():
+            gitignore.write_text(STATE_GITIGNORE)
+        self.cache = Cache(settings.cache_path)
+
+    def target(self, spec: str | None = None) -> ModelClient:
+        return ModelClient(
+            spec or self.settings.model,
+            self.usage,
+            self.cache,
+            self.settings.requests_per_minute,
+            **self.settings.model_options,
+        )
+
+    def generator(self) -> ModelClient:
+        return ModelClient(
+            self.settings.generator, self.usage, self.cache, self.settings.requests_per_minute
+        )
+
+    def dataset(self) -> Dataset | None:
+        return Dataset.load(self.settings.dataset_path)
+
+    def close(self) -> None:
+        self.cache.close()
+
+    def __enter__(self) -> "Workspace":
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.close()
+
+
+async def prepare_dataset(
+    workspace: Workspace, toolset: Toolset, on_call: Callable[[], None] = lambda: None
+) -> tuple[Dataset, GenerationReport | None]:
+    existing = workspace.dataset()
+    if existing is not None:
+        return existing, None
+    generator = QueryGenerator(toolset, workspace.generator(), workspace.settings, on_call)
+    dataset, report = await generator.build()
+    dataset.save(workspace.settings.dataset_path)
+    return dataset, report
+
+
+async def pick_tools(
+    workspace: Workspace,
+    client: ModelClient,
+    toolset: Toolset,
+    queries: list[Query],
+    on_pick: Callable[[], None] = lambda: None,
+) -> dict[str, Pick]:
+    settings = workspace.settings
+    runner = Runner(client, toolset, settings.system_prompt, settings.concurrency, on_pick)
+    return await runner.run(queries)
