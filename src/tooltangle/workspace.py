@@ -11,8 +11,9 @@ STATE_GITIGNORE = "cache.sqlite*\nreport.json\n"
 
 
 class Workspace:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, on_event: Callable[[str], None] | None = None):
         self.settings = settings
+        self.on_event = on_event
         self.usage = UsageLog(settings.prices)
         settings.state_dir.mkdir(parents=True, exist_ok=True)
         gitignore = settings.state_dir / ".gitignore"
@@ -31,7 +32,11 @@ class Workspace:
 
     def generator(self) -> ModelClient:
         return ModelClient(
-            self.settings.generator, self.usage, self.cache, self.settings.requests_per_minute
+            self.settings.generator,
+            self.usage,
+            self.cache,
+            self.settings.requests_per_minute,
+            on_event=self.on_event,
         )
 
     def dataset(self) -> Dataset | None:

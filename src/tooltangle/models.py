@@ -2,10 +2,12 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 import sqlite3
 import time
 import warnings
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -35,6 +37,10 @@ PROVIDERS_WITH_RETRIES = {"google_genai", "openai", "anthropic"}
 
 
 class ModelError(Exception):
+    pass
+
+
+class QuotaExhausted(ModelError):
     pass
 
 
@@ -90,6 +96,36 @@ class Cache:
         self.close()
 
 
+@dataclass
+class RateLimit:
+    retry_after: float | None
+    limit: int | None
+    per_day: bool
+
+
+def parse_rate_limit(error: Exception) -> RateLimit | None:
+    text = str(error)
+    if not re.search(r"\b429\b|RESOURCE_EXHAUSTED|rate.?limit", text, re.IGNORECASE):
+        return None
+    retry = re.search(r"(?:retry|try again) in ([\d.]+)\s*s", text, re.IGNORECASE)
+    retry = retry or re.search(r"retryDelay'?\"?:\s*'?\"?([\d.]+)s", text)
+    limit = re.search(r"quotaValue'?\"?:\s*'?\"?(\d+)", text) or re.search(r"limit: (\d+)", text)
+    return RateLimit(
+        retry_after=float(retry.group(1)) if retry else None,
+        limit=int(limit.group(1)) if limit else None,
+        per_day="PerDay" in text,
+    )
+
+
+def is_transient(error: Exception) -> bool:
+    pattern = r"\b(500|502|503|504)\b|UNAVAILABLE|overloaded|high demand|DEADLINE_EXCEEDED"
+    return bool(re.search(pattern, str(error), re.IGNORECASE))
+
+
+def backoff(attempt: int) -> float:
+    return float(min(60, 5 * 2**attempt))
+
+
 class Pacer:
     def __init__(self, requests_per_minute: float):
         self.interval = 60 / requests_per_minute
@@ -103,6 +139,12 @@ class Pacer:
             self.next_slot = max(now, self.next_slot) + self.interval
         if delay:
             await asyncio.sleep(delay)
+
+    def slow_down(self, requests_per_minute: float) -> None:
+        self.interval = max(self.interval, 60 / requests_per_minute * 1.05)
+
+    def pause(self, seconds: float) -> None:
+        self.next_slot = max(self.next_slot, time.monotonic() + seconds)
 
 
 @dataclass
@@ -155,7 +197,9 @@ class ModelClient:
         usage: UsageLog,
         cache: Cache | None = None,
         requests_per_minute: float = 60,
+        max_attempts: int = 8,
         model: BaseChatModel | None = None,
+        on_event: Callable[[str], None] | None = None,
         **options: Any,
     ):
         self.spec = spec
@@ -163,19 +207,45 @@ class ModelClient:
         self.cache = cache
         self.model = model or create_model(spec, **options)
         self.pacer = Pacer(requests_per_minute)
+        self.max_attempts = max_attempts
+        self.on_event = on_event or (lambda message: None)
 
     async def invoke(self, runnable: Any, messages: list[BaseMessage]) -> Any:
         result, _ = await self.invoke_timed(runnable, messages)
         return result
 
     async def invoke_timed(self, runnable: Any, messages: list[BaseMessage]) -> tuple[Any, float]:
-        await self.pacer.wait()
-        started = time.perf_counter()
-        try:
-            result = await runnable.ainvoke(messages)
-        except Exception as error:
-            raise ModelError(f"{self.spec} failed: {error}") from error
-        return result, time.perf_counter() - started
+        last_error = None
+        for attempt in range(self.max_attempts):
+            await self.pacer.wait()
+            started = time.perf_counter()
+            try:
+                result = await runnable.ainvoke(messages)
+                return result, time.perf_counter() - started
+            except Exception as error:
+                last_error = error
+                limit = parse_rate_limit(error)
+                if limit is not None:
+                    if limit.per_day:
+                        per_day = f" ({limit.limit} requests per day)" if limit.limit else ""
+                        raise QuotaExhausted(
+                            f"the daily quota for {self.spec} is used up{per_day}; "
+                            "finished calls are cached, so rerun later or pick another model"
+                        ) from error
+                    if limit.limit:
+                        self.pacer.slow_down(limit.limit)
+                    wait = limit.retry_after or backoff(attempt)
+                    self.pacer.pause(wait)
+                    self.on_event(f"{model_name(self.spec)} is rate limited, waiting {wait:.0f}s")
+                elif is_transient(error):
+                    wait = backoff(attempt)
+                    self.pacer.pause(wait)
+                    self.on_event(f"{model_name(self.spec)} is overloaded, retrying in {wait:.0f}s")
+                else:
+                    raise ModelError(f"{self.spec} failed: {error}") from error
+        raise ModelError(
+            f"{self.spec} kept failing after {self.max_attempts} attempts: {last_error}"
+        )
 
     def cached_answer[T: BaseModel](self, schema: type[T], prompt: str, phase: str) -> T | None:
         if self.cache is None:

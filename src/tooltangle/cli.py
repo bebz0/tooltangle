@@ -13,7 +13,7 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, T
 from tooltangle import __version__
 from tooltangle.findings import Severity, evaluation_findings, lookalike_pairs, static_findings
 from tooltangle.metrics import evaluate
-from tooltangle.models import ModelError, model_name
+from tooltangle.models import ModelError, QuotaExhausted, model_name
 from tooltangle.render import (
     label,
     print_findings,
@@ -70,6 +70,10 @@ def main(
     load_dotenv(Path.cwd() / ".env")
 
 
+def show_event(message: str) -> None:
+    console.print(f"[dim]{message}[/dim]")
+
+
 def fail(message: str, code: int = 2) -> NoReturn:
     console.print(f"[red]error:[/red] {message}")
     raise typer.Exit(code)
@@ -110,6 +114,9 @@ def progress_bar(description: str, total: int) -> Iterator[Callable[[], None]]:
 def run_async[T](workspace: Workspace, coroutine: Coroutine[Any, Any, T]) -> T:
     try:
         return asyncio.run(coroutine)
+    except QuotaExhausted as error:
+        print_usage(console, workspace.usage)
+        fail(str(error), code=3)
     except ModelError as error:
         fail(str(error))
     except KeyboardInterrupt:
@@ -147,7 +154,7 @@ def check(
     """Measure which tools the model confuses and report what to fix."""
     settings = get_settings(model=model, generator=generator)
     loaded = load(source, timeout)
-    with Workspace(settings) as workspace:
+    with Workspace(settings, show_event) as workspace:
         report = run_async(workspace, run_check(workspace, loaded))
 
     has_errors = any(finding["severity"] == Severity.ERROR for finding in report["findings"])

@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass, field
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from tooltangle.dataset import Query
-from tooltangle.models import ModelClient, cache_key
+from tooltangle.models import ModelClient, QuotaExhausted, cache_key
 from tooltangle.toolset import Toolset
 
 
@@ -63,6 +63,8 @@ class Runner:
         async with self.semaphore:
             try:
                 message, seconds = await self.client.invoke_timed(self.bound, messages)
+            except QuotaExhausted:
+                raise
             except Exception as error:
                 self.on_pick()
                 return Pick(query.id, None, error=str(error)[:500])
