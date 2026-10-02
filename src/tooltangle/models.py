@@ -210,6 +210,10 @@ class ModelClient:
         self.max_attempts = max_attempts
         self.on_event = on_event or (lambda message: None)
 
+    @property
+    def used(self) -> list[str]:
+        return [self.spec]
+
     async def invoke(self, runnable: Any, messages: list[BaseMessage]) -> Any:
         result, _ = await self.invoke_timed(runnable, messages)
         return result
@@ -274,3 +278,46 @@ class ModelClient:
                 return parsed
             last_error = result.get("parsing_error")
         raise ModelError(f"{self.spec} did not return a valid {schema.__name__}: {last_error}")
+
+
+class FallbackClient:
+    def __init__(self, clients: list[ModelClient]):
+        self.clients = clients
+        self.spec = clients[0].spec
+        self.answered_by: set[str] = set()
+        self.skipped: set[str] = set()
+        self.last_error: ModelError | None = None
+
+    @property
+    def used(self) -> list[str]:
+        return [client.spec for client in self.clients if client.spec in self.answered_by]
+
+    async def ask[T: BaseModel](self, schema: type[T], prompt: str, phase: str) -> T:
+        for client in self.clients:
+            cached = client.cached_answer(schema, prompt, phase)
+            if cached is not None:
+                self.answered_by.add(client.spec)
+                return cached
+
+        for client in self.clients:
+            if client.spec in self.skipped:
+                continue
+            try:
+                answer = await client.ask(schema, prompt, phase)
+            except QuotaExhausted as error:
+                self.give_up(client, error, "is out of daily quota")
+            except ModelError as error:
+                self.give_up(client, error, "keeps failing")
+            else:
+                self.answered_by.add(client.spec)
+                return answer
+        specs = ", ".join(client.spec for client in self.clients)
+        raise QuotaExhausted(
+            f"no generator model can answer right now ({specs}); "
+            f"finished calls are cached, so rerun later. Last error: {self.last_error}"
+        )
+
+    def give_up(self, client: ModelClient, error: ModelError, reason: str) -> None:
+        self.skipped.add(client.spec)
+        self.last_error = error
+        client.on_event(f"{model_name(client.spec)} {reason}, moving on")

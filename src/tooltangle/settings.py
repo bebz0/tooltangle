@@ -18,6 +18,15 @@ class Settings(BaseModel):
 
     model: str = "google_genai:gemini-3.5-flash-lite"
     generator: str = "google_genai:gemini-3.8-flash"
+    generator_fallbacks: list[str] = Field(
+        default_factory=lambda: [
+            "google_genai:gemini-3.7-flash",
+            "google_genai:gemini-3.6-flash",
+            "google_genai:gemini-3.5-flash",
+            "google_genai:gemini-2.5-flash",
+            "google_genai:gemma-4-31b-it",
+        ]
+    )
     model_options: dict[str, Any] = Field(default_factory=dict)
     language: str = "English"
     queries_per_tool: int = 10

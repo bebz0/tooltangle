@@ -2,7 +2,7 @@ from collections.abc import Callable
 
 from tooltangle.dataset import Dataset, Query
 from tooltangle.generation import GenerationReport, QueryGenerator
-from tooltangle.models import Cache, ModelClient, UsageLog
+from tooltangle.models import Cache, FallbackClient, ModelClient, UsageLog
 from tooltangle.runner import Pick, Runner
 from tooltangle.settings import Settings
 from tooltangle.toolset import Toolset
@@ -30,13 +30,19 @@ class Workspace:
             **self.settings.model_options,
         )
 
-    def generator(self) -> ModelClient:
-        return ModelClient(
-            self.settings.generator,
-            self.usage,
-            self.cache,
-            self.settings.requests_per_minute,
-            on_event=self.on_event,
+    def generator(self) -> FallbackClient:
+        specs = dict.fromkeys([self.settings.generator, *self.settings.generator_fallbacks])
+        return FallbackClient(
+            [
+                ModelClient(
+                    spec,
+                    self.usage,
+                    self.cache,
+                    self.settings.requests_per_minute,
+                    on_event=self.on_event,
+                )
+                for spec in specs
+            ]
         )
 
     def dataset(self) -> Dataset | None:

@@ -2,7 +2,14 @@ import pytest
 from fakes import FakeChatModel
 from pydantic import BaseModel
 
-from tooltangle.models import Cache, ModelClient, QuotaExhausted, UsageLog, parse_rate_limit
+from tooltangle.models import (
+    Cache,
+    FallbackClient,
+    ModelClient,
+    QuotaExhausted,
+    UsageLog,
+    parse_rate_limit,
+)
 
 GEMINI_429 = (
     "Error calling model 'gemini-3.8-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. "
@@ -72,3 +79,23 @@ async def test_ask_caches_structured_answers(tmp_path):
     assert model.prompts == ["hi"]
     entry = usage.entries[("generate", "fake:model")]
     assert (entry.calls, entry.cached, entry.input_tokens) == (1, 1, 500)
+
+
+async def test_fallback_moves_on_when_a_model_fails():
+    def out_of_quota(schema, prompt):
+        raise RuntimeError(GEMINI_DAILY_429)
+
+    usage = UsageLog()
+    exhausted = FakeChatModel(responder=out_of_quota)
+    backup = FakeChatModel(responder=lambda schema, prompt: schema(value="backup"))
+    fallback = FallbackClient(
+        [
+            ModelClient("a", usage, requests_per_minute=6000, model=exhausted),
+            ModelClient("b", usage, requests_per_minute=6000, model=backup),
+        ]
+    )
+    assert (await fallback.ask(Answer, "hi", "generate")).value == "backup"
+    assert (await fallback.ask(Answer, "hello", "generate")).value == "backup"
+    assert fallback.used == ["b"]
+    assert exhausted.prompts == ["hi"]
+    assert backup.prompts == ["hi", "hello"]

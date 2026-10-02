@@ -11,7 +11,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from tooltangle import prompts
 from tooltangle.dataset import Dataset, DatasetInfo, Kind, Query, assign_splits, query_id
 from tooltangle.findings import lookalike_pairs
-from tooltangle.models import ModelClient
+from tooltangle.models import FallbackClient, ModelClient
 from tooltangle.settings import Settings
 from tooltangle.toolset import Toolset
 
@@ -98,7 +98,7 @@ class QueryGenerator:
     def __init__(
         self,
         toolset: Toolset,
-        client: ModelClient,
+        client: ModelClient | FallbackClient,
         settings: Settings,
         on_call: Callable[[], None] = lambda: None,
     ):
@@ -132,7 +132,7 @@ class QueryGenerator:
         queries.sort(key=lambda query: (order.get(query.tool, len(order)), query.kind, query.id))
         report.kept = len(queries)
         info = DatasetInfo(
-            generators=[self.client.spec],
+            generators=sorted(self.client.used),
             language=self.settings.language,
             labeled_tools=self.toolset.keys,
             labeling=LABELING_VERSION,
