@@ -5,6 +5,7 @@ from tooltangle.dataset import Dataset, Query
 from tooltangle.findings import estimate_definition_tokens
 from tooltangle.generation import GenerationReport, QueryGenerator, plan_generation
 from tooltangle.models import Cache, FallbackClient, ModelClient, UsageLog
+from tooltangle.overrides import Overrides, load_overrides
 from tooltangle.runner import Pick, Runner
 from tooltangle.settings import Settings
 from tooltangle.toolset import Toolset
@@ -50,6 +51,9 @@ class Workspace:
     def dataset(self) -> Dataset | None:
         return Dataset.load(self.settings.dataset_path)
 
+    def overrides(self) -> Overrides:
+        return load_overrides(self.settings.overrides_file)
+
     def close(self) -> None:
         self.cache.close()
 
@@ -78,18 +82,20 @@ def tokens_per_call(toolset: Toolset) -> int:
     return estimate_definition_tokens(toolset) + PROMPT_OVERHEAD_TOKENS
 
 
-def estimate_check(workspace: Workspace, toolset: Toolset, specs: list[str]) -> Estimate:
+def estimate_check(
+    workspace: Workspace, toolset: Toolset, tested: Toolset, specs: list[str]
+) -> Estimate:
     settings = workspace.settings
     existing = workspace.dataset()
     plan = plan_generation(toolset, existing)
-    estimate = Estimate(tokens_per_call=tokens_per_call(toolset))
+    estimate = Estimate(tokens_per_call=tokens_per_call(tested))
     if not plan.is_empty:
         estimate.generator_calls = plan.estimated_calls(settings, len(toolset))
 
     queries = plan.kept if existing else []
     new_queries = 0 if plan.is_empty else plan.estimated_queries(settings, len(toolset))
     for spec in specs:
-        runner = Runner(workspace.target(spec), toolset, settings.system_prompt)
+        runner = Runner(workspace.target(spec), tested, settings.system_prompt)
         estimate.target_calls[spec] = len(runner.uncached(queries)) + new_queries
     return estimate
 

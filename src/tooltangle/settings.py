@@ -36,6 +36,7 @@ class Settings(BaseModel):
     requests_per_minute: int = 120
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
     state_dir: Path = Path(".tooltangle")
+    overrides_file: Path = Path("tooltangle.overrides.yaml")
     prices: dict[str, tuple[float, float]] = Field(default_factory=dict)
 
     @property

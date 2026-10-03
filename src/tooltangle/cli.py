@@ -15,6 +15,7 @@ from tooltangle import __version__
 from tooltangle.findings import Severity, evaluation_findings, lookalike_pairs, static_findings
 from tooltangle.metrics import evaluate
 from tooltangle.models import ModelError, QuotaExhausted, model_name
+from tooltangle.overrides import OverridesError, apply_to_toolset
 from tooltangle.render import (
     label,
     print_findings,
@@ -28,6 +29,7 @@ from tooltangle.render import (
 from tooltangle.report import build_report, write_report
 from tooltangle.settings import Settings, SettingsError, load_settings
 from tooltangle.sources import KNOWN_CLIENTS, LoadedTools, SourceError, load_tools
+from tooltangle.toolset import Toolset
 from tooltangle.workspace import Estimate, Workspace, estimate_check, pick_tools, prepare_dataset
 
 app = typer.Typer(
@@ -177,24 +179,39 @@ def check(
     model: ModelOption = None,
     generator: GeneratorOption = None,
     yes: YesOption = False,
+    use_overrides: Annotated[
+        bool, typer.Option("--overrides/--no-overrides", help="Apply the verified descriptions.")
+    ] = True,
     timeout: Timeout = 60,
 ) -> None:
     """Measure which tools the model confuses and report what to fix."""
     settings = get_settings(model=model, generator=generator)
     loaded = load(source, timeout)
     with Workspace(settings, show_event) as workspace:
-        estimate = estimate_check(workspace, loaded.toolset, [settings.model])
+        try:
+            overrides = workspace.overrides() if use_overrides else {}
+        except OverridesError as error:
+            fail(str(error))
+        tested = apply_to_toolset(loaded.toolset, overrides)
+        estimate = estimate_check(workspace, loaded.toolset, tested, [settings.model])
         confirm_cost(estimate, workspace, yes)
-        report = run_async(workspace, run_check(workspace, loaded))
+        report = run_async(workspace, run_check(workspace, loaded, tested, len(overrides)))
 
     has_errors = any(finding["severity"] == Severity.ERROR for finding in report["findings"])
     raise typer.Exit(1 if has_errors else 0)
 
 
-async def run_check(workspace: Workspace, loaded: LoadedTools) -> dict[str, Any]:
+async def run_check(
+    workspace: Workspace,
+    loaded: LoadedTools,
+    tested: Toolset,
+    override_count: int,
+) -> dict[str, Any]:
     settings = workspace.settings
     client = workspace.target()
     print_sources(console, loaded)
+    if override_count:
+        console.print(f"{label('overrides')} {override_count} verified descriptions applied")
 
     calls = 0
     with console.status("writing test messages...") as status:
@@ -208,16 +225,16 @@ async def run_check(workspace: Workspace, loaded: LoadedTools) -> dict[str, Any]
     print_generation(console, generation, dataset)
 
     with progress_bar(f"asking {model_name(client.spec)}", len(dataset.queries)) as advance:
-        picks = await pick_tools(workspace, client, loaded.toolset, dataset.queries, advance)
+        picks = await pick_tools(workspace, client, tested, dataset.queries, advance)
 
     evaluation = evaluate(client.spec, dataset.queries, picks)
-    findings = static_findings(loaded.toolset) + evaluation_findings(evaluation)
+    findings = static_findings(tested) + evaluation_findings(evaluation)
     print_findings(console, findings)
     print_summary(console, evaluation)
     console.print()
     print_usage(console, workspace.usage)
 
-    report = build_report(evaluation, findings, dataset.queries, picks, loaded.toolset)
+    report = build_report(evaluation, findings, dataset.queries, picks, tested)
     report_path = settings.state_dir / "report.json"
     write_report(report, report_path)
     console.print(f"{label('saved')} {settings.dataset_path} · {report_path}")
