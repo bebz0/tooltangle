@@ -1,5 +1,5 @@
-from collections import Counter
-from collections.abc import Callable
+from collections import Counter, defaultdict
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
@@ -55,25 +55,26 @@ class Verdict:
 
 
 def confused_pairs(evaluation: Evaluation, limit: int, minimum: int = 2) -> list[tuple[str, str]]:
-    counts: Counter = Counter()
+    counts: Counter[tuple[str, str]] = Counter()
     for confusion in evaluation.confusions:
         expected, picked = confusion.expected, confusion.picked
         if expected is None or picked is None or picked.startswith("?"):
             continue
-        counts[tuple(sorted((expected, picked)))] += confusion.count
+        first, second = sorted((expected, picked))
+        counts[(first, second)] += confusion.count
     return [pair for pair, count in counts.most_common() if count >= minimum][:limit]
 
 
 def improvement_p_value(fixed: int, broken: int) -> float:
     if fixed + broken == 0:
         return 1.0
-    return binomtest(fixed, fixed + broken, 0.5, alternative="greater").pvalue
+    return float(binomtest(fixed, fixed + broken, 0.5, alternative="greater").pvalue)
 
 
 def related_tools(
     pair: tuple[str, str], evaluation: Evaluation, toolset: Toolset, limit: int = RELATED_TOOLS
 ) -> list[str]:
-    scores: Counter = Counter()
+    scores: defaultdict[str, float] = defaultdict(float)
     for confusion in evaluation.confusions:
         expected, picked = confusion.expected, confusion.picked
         if expected in pair and picked and picked not in pair and not picked.startswith("?"):
@@ -85,7 +86,7 @@ def related_tools(
             scores[second] += similarity
         elif second in pair and first not in pair:
             scores[first] += similarity
-    return [key for key, _ in scores.most_common(limit)]
+    return sorted(scores, key=scores.__getitem__, reverse=True)[:limit]
 
 
 class Fixer:
@@ -94,7 +95,7 @@ class Fixer:
         toolset: Toolset,
         dataset: Dataset,
         generator: FallbackClient,
-        pick: Callable,
+        pick: Callable[[Toolset, list[Query]], Awaitable[dict[str, Pick]]],
         attempts: int = 2,
     ):
         self.toolset = toolset
@@ -114,7 +115,9 @@ class Fixer:
             if query.tool not in pair or query.id not in picks:
                 continue
             pick = picks[query.id]
-            picked = self.function(pick.tool) if pick.tool in self.toolset else "no tool"
+            picked = "no tool"
+            if pick.tool is not None and pick.tool in self.toolset:
+                picked = self.function(pick.tool)
             line = f'- "{query.text}" → should be `{self.function(query.tool)}`'
             if is_correct(query, pick):
                 successes.append(line)

@@ -111,7 +111,7 @@ def print_usage(console: Console, usage: UsageLog) -> None:
         console.print(f"{' ' * 10}[dim]{amount} at paid-tier prices[/dim]")
 
 
-def print_verdict(console: Console, pair: tuple[str, str], verdict: Verdict | None):
+def print_verdict(console: Console, pair: tuple[str, str], verdict: Verdict | None) -> None:
     console.print(f"\n[bold]{pair[0]} ↔ {pair[1]}[/bold]")
     if verdict is None:
         console.print("  [yellow]✗ no usable rewrite[/yellow]")

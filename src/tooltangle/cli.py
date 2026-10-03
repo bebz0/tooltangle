@@ -12,7 +12,7 @@ from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 
 from tooltangle import __version__
-from tooltangle.dataset import Dataset
+from tooltangle.dataset import Dataset, Query
 from tooltangle.findings import (
     Severity,
     evaluation_findings,
@@ -35,7 +35,7 @@ from tooltangle.render import (
     print_verdict,
 )
 from tooltangle.report import build_report, write_report
-from tooltangle.runner import Runner
+from tooltangle.runner import Pick, Runner
 from tooltangle.settings import Settings, SettingsError, load_settings
 from tooltangle.sources import KNOWN_CLIENTS, LoadedTools, SourceError, load_tools
 from tooltangle.toolset import Toolset
@@ -47,7 +47,6 @@ from tooltangle.workspace import (
     prepare_dataset,
     tokens_per_call,
 )
-
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -324,7 +323,7 @@ async def run_fix(
 
     with console.status("") as status:
 
-        async def pick(toolset: Toolset, queries: list) -> dict:
+        async def pick(toolset: Toolset, queries: list[Query]) -> dict[str, Pick]:
             done = 0
 
             def advance() -> None:
