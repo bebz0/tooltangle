@@ -5,7 +5,7 @@ from rich.table import Table
 
 from tooltangle.dataset import Dataset
 from tooltangle.findings import Finding, Severity, estimate_definition_tokens
-from tooltangle.fixer import ALPHA, Verdict
+from tooltangle.fixer import Verdict
 from tooltangle.generation import GenerationReport
 from tooltangle.metrics import Evaluation
 from tooltangle.models import UsageLog, model_name
@@ -116,12 +116,18 @@ def print_verdict(console: Console, pair: tuple[str, str], verdict: Verdict | No
     if verdict is None:
         console.print("  [yellow]✗ no usable rewrite[/yellow]")
         return
+    if verdict.underpowered:
+        console.print(
+            f"  [yellow]✗ only {verdict.before_errors} mistakes on {verdict.evaluated} unseen "
+            f"messages, and proving a fix needs at least {verdict.needed}[/yellow]"
+        )
+        return
     for key, description in verdict.descriptions.items():
         console.print(f'  [dim]{key}:[/dim] "{description}"', highlight=False)
     console.print(
         f"  {label('holdout')} errors {verdict.before_errors} → {verdict.after_errors} "
         f"of {verdict.evaluated}   fixed {verdict.fixed} · broke {verdict.broken}   "
-        f"p = {verdict.p_value:.3f} [dim](needs < {ALPHA})[/dim]"
+        f"p = {verdict.p_value:.3f} [dim](needs < {verdict.alpha:.3g})[/dim]"
     )
     console.print(
         f"  {label('others')} fixed {verdict.others_fixed} · broke {verdict.others_broken} "

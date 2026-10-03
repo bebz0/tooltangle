@@ -85,9 +85,16 @@ Messages it routed correctly:
 
 {successes}
 
+{feedback}
 Rewrite the description of one or both of these two tools so the boundary between them \
 is obvious. Rules:
 - Keep every fact the current description states and don't invent capabilities.
 - Say plainly when to use the tool and when to use the other one instead.
 - At most three sentences per tool.
 - Don't quote or paraphrase the example messages; describe the general rule."""
+
+FIX_FEEDBACK = """
+Your previous rewrite was tested on messages you haven't seen: it fixed {fixed} and \
+broke {broken} of them for this pair, and broke {others_broken} messages for other tools. \
+Try a different approach.
+"""

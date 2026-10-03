@@ -1,6 +1,7 @@
 from collections import Counter, defaultdict
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from math import floor, log2
 
 from pydantic import BaseModel, Field
 from scipy.stats import binomtest
@@ -43,10 +44,13 @@ class Verdict:
     others: int
     others_fixed: int
     others_broken: int
+    alpha: float = ALPHA
+    needed: int = 0
+    underpowered: bool = False
 
     @property
     def proven(self) -> bool:
-        return self.p_value < ALPHA
+        return self.p_value < self.alpha
 
     @property
     def accepted(self) -> bool:
@@ -63,6 +67,18 @@ def confused_pairs(evaluation: Evaluation, limit: int, minimum: int = 2) -> list
         first, second = sorted((expected, picked))
         counts[(first, second)] += confusion.count
     return [pair for pair, count in counts.most_common() if count >= minimum][:limit]
+
+
+def needed_fixes(alpha: float) -> int:
+    return floor(log2(1 / alpha)) + 1
+
+
+def count_errors(queries: list[Query], picks: dict[str, Pick]) -> int:
+    return sum(
+        not is_correct(query, picks[query.id])
+        for query in queries
+        if query.id in picks and not picks[query.id].error
+    )
 
 
 def improvement_p_value(fixed: int, broken: int) -> float:
@@ -125,14 +141,22 @@ class Fixer:
                 failures.append(f"{line}, picked `{picked}`")
         return failures[:EXAMPLES], successes[:EXAMPLES]
 
-    async def propose(self, pair: tuple[str, str], picks: dict[str, Pick]) -> DescriptionFix:
+    async def propose(
+        self, pair: tuple[str, str], picks: dict[str, Pick], last: Verdict | None
+    ) -> DescriptionFix:
         failures, successes = self.evidence(pair, picks)
+        feedback = ""
+        if last is not None:
+            feedback = prompts.FIX_FEEDBACK.format(
+                fixed=last.fixed, broken=last.broken, others_broken=last.others_broken
+            )
         prompt = prompts.FIX_DESCRIPTIONS.format(
             catalog=self.toolset.catalog(),
             first=self.function(pair[0]),
             second=self.function(pair[1]),
             failures="\n".join(failures) or "(none in the examples)",
             successes="\n".join(successes) or "(none in the examples)",
+            feedback=feedback,
         )
         return await self.generator.ask(DescriptionFix, prompt, "fix")
 
@@ -147,15 +171,37 @@ class Fixer:
     async def try_pair(
         self, pair: tuple[str, str], evaluation: Evaluation, picks: dict[str, Pick]
     ) -> Verdict | None:
+        alpha = ALPHA / self.attempts
+        needed = needed_fixes(alpha)
         holdout = self.dataset.for_split("holdout")
         pair_queries = [query for query in holdout if query.tool in pair]
         related = set(related_tools(pair, evaluation, self.toolset))
         other_queries = [query for query in holdout if query.tool in related or query.tool is None]
         before = await self.pick(self.toolset, pair_queries + other_queries)
 
+        errors = count_errors(pair_queries, before)
+        if errors < needed:
+            return Verdict(
+                pair=pair,
+                descriptions={},
+                reasoning="",
+                before_errors=errors,
+                after_errors=errors,
+                evaluated=len(pair_queries),
+                fixed=0,
+                broken=0,
+                p_value=1.0,
+                others=0,
+                others_fixed=0,
+                others_broken=0,
+                alpha=alpha,
+                needed=needed,
+                underpowered=True,
+            )
+
         last = None
         for _ in range(self.attempts):
-            fix = await self.propose(pair, picks)
+            fix = await self.propose(pair, picks, last)
             descriptions = self.descriptions_from(fix, pair)
             if not descriptions:
                 continue
@@ -164,6 +210,7 @@ class Fixer:
             last = compare(
                 pair, descriptions, fix.reasoning, pair_queries, other_queries, before, after
             )
+            last.alpha, last.needed = alpha, needed
             if last.accepted:
                 self.toolset = candidate
                 return last
