@@ -69,3 +69,25 @@ are merely related. Return an empty list when the assistant should answer direct
 when no tool can help.
 
 {messages}"""
+
+FIX_DESCRIPTIONS = """\
+You maintain the descriptions of tools that an AI assistant chooses between.
+These are all the tools the assistant can see:
+
+{catalog}
+
+The assistant keeps confusing `{first}` and `{second}`. Messages where it picked the \
+wrong one of the two:
+
+{failures}
+
+Messages it routed correctly:
+
+{successes}
+
+Rewrite the description of one or both of these two tools so the boundary between them \
+is obvious. Rules:
+- Keep every fact the current description states and don't invent capabilities.
+- Say plainly when to use the tool and when to use the other one instead.
+- At most three sentences per tool.
+- Don't quote or paraphrase the example messages; describe the general rule."""

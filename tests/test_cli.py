@@ -28,6 +28,7 @@ def test_check_end_to_end(project, write_config, notes_server, fake_models):
     result = runner.invoke(app, ["check", str(config), "--yes"])
     assert result.exit_code == 1, result.stdout
     assert "notes.search_notes → notes.search_files" in result.stdout
+    assert "next      tooltangle fix" in result.stdout
 
     report = json.loads((project / ".tooltangle/report.json").read_text())
     assert report["tools"]["notes.search_notes"]["accuracy"] < 0.7

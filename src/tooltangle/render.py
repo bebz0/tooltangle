@@ -5,6 +5,7 @@ from rich.table import Table
 
 from tooltangle.dataset import Dataset
 from tooltangle.findings import Finding, Severity, estimate_definition_tokens
+from tooltangle.fixer import ALPHA, Verdict
 from tooltangle.generation import GenerationReport
 from tooltangle.metrics import Evaluation
 from tooltangle.models import UsageLog, model_name
@@ -108,3 +109,27 @@ def print_usage(console: Console, usage: UsageLog) -> None:
     if cost:
         amount = "< $0.01" if cost < 0.01 else f"≈ ${cost:.2f}"
         console.print(f"{' ' * 10}[dim]{amount} at paid-tier prices[/dim]")
+
+
+def print_verdict(console: Console, pair: tuple[str, str], verdict: Verdict | None):
+    console.print(f"\n[bold]{pair[0]} ↔ {pair[1]}[/bold]")
+    if verdict is None:
+        console.print("  [yellow]✗ no usable rewrite[/yellow]")
+        return
+    for key, description in verdict.descriptions.items():
+        console.print(f'  [dim]{key}:[/dim] "{description}"', highlight=False)
+    console.print(
+        f"  {label('holdout')} errors {verdict.before_errors} → {verdict.after_errors} "
+        f"of {verdict.evaluated}   fixed {verdict.fixed} · broke {verdict.broken}   "
+        f"p = {verdict.p_value:.3f} [dim](needs < {ALPHA})[/dim]"
+    )
+    console.print(
+        f"  {label('others')} fixed {verdict.others_fixed} · broke {verdict.others_broken} "
+        f"on {verdict.others} messages for related tools"
+    )
+    if verdict.accepted:
+        console.print("  [green]✓ accepted[/green]")
+    elif not verdict.proven:
+        console.print("  [yellow]✗ not proven better on unseen messages[/yellow]")
+    else:
+        console.print("  [yellow]✗ breaks other tools[/yellow]")

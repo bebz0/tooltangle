@@ -12,10 +12,17 @@ from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 
 from tooltangle import __version__
-from tooltangle.findings import Severity, evaluation_findings, lookalike_pairs, static_findings
+from tooltangle.dataset import Dataset
+from tooltangle.findings import (
+    Severity,
+    evaluation_findings,
+    lookalike_pairs,
+    static_findings,
+)
+from tooltangle.fixer import Fixer, Verdict, confused_pairs
 from tooltangle.metrics import evaluate
 from tooltangle.models import ModelError, QuotaExhausted, model_name
-from tooltangle.overrides import OverridesError, apply_to_toolset
+from tooltangle.overrides import OverridesError, apply_to_toolset, save_overrides
 from tooltangle.render import (
     label,
     print_findings,
@@ -25,12 +32,22 @@ from tooltangle.render import (
     print_summary,
     print_tool_list,
     print_usage,
+    print_verdict,
 )
 from tooltangle.report import build_report, write_report
+from tooltangle.runner import Runner
 from tooltangle.settings import Settings, SettingsError, load_settings
 from tooltangle.sources import KNOWN_CLIENTS, LoadedTools, SourceError, load_tools
 from tooltangle.toolset import Toolset
-from tooltangle.workspace import Estimate, Workspace, estimate_check, pick_tools, prepare_dataset
+from tooltangle.workspace import (
+    Estimate,
+    Workspace,
+    estimate_check,
+    pick_tools,
+    prepare_dataset,
+    tokens_per_call,
+)
+
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -40,6 +57,7 @@ app = typer.Typer(
 console = Console(highlight=False)
 
 CONFIRM_ABOVE = 25
+FIX_CALLS_PER_ATTEMPT = 60
 
 Source = Annotated[
     str,
@@ -198,6 +216,8 @@ def check(
         report = run_async(workspace, run_check(workspace, loaded, tested, len(overrides)))
 
     has_errors = any(finding["severity"] == Severity.ERROR for finding in report["findings"])
+    if any(finding["code"] == "confusion" for finding in report["findings"]):
+        console.print(f"{label('next')} tooltangle fix {source}")
     raise typer.Exit(1 if has_errors else 0)
 
 
@@ -239,3 +259,93 @@ async def run_check(
     write_report(report, report_path)
     console.print(f"{label('saved')} {settings.dataset_path} · {report_path}")
     return report
+
+
+@app.command()
+def fix(
+    source: Source,
+    model: ModelOption = None,
+    generator: GeneratorOption = None,
+    yes: YesOption = False,
+    pairs: Annotated[int, typer.Option(help="How many confused pairs to work on.")] = 3,
+    attempts: Annotated[int, typer.Option(help="Rewrites to try for each pair.")] = 2,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Show the verdicts without saving anything.")
+    ] = False,
+    timeout: Timeout = 60,
+) -> None:
+    """Rewrite the descriptions of confused tools and keep only the proven ones."""
+    settings = get_settings(model=model, generator=generator)
+    loaded = load(source, timeout)
+    with Workspace(settings, show_event) as workspace:
+        dataset = workspace.dataset()
+        if dataset is None:
+            fail(f"no test messages yet, run: tooltangle check {source}")
+        try:
+            overrides = workspace.overrides()
+        except OverridesError as error:
+            fail(str(error))
+        tested = apply_to_toolset(loaded.toolset, overrides)
+
+        baseline_calls = len(Runner(workspace.target(), tested).uncached(dataset.queries))
+        fix_calls = pairs * attempts * FIX_CALLS_PER_ATTEMPT
+        estimate = Estimate(
+            generator_calls=pairs * attempts,
+            target_calls={settings.model: baseline_calls + fix_calls},
+            tokens_per_call=tokens_per_call(tested),
+        )
+        confirm_cost(estimate, workspace, yes)
+        verdicts = run_async(workspace, run_fix(workspace, tested, dataset, pairs, attempts))
+
+        accepted = [verdict for verdict in verdicts if verdict and verdict.accepted]
+        console.print()
+        print_usage(console, workspace.usage)
+        if not accepted:
+            console.print(f"{label('saved')} nothing, no rewrite was proven better")
+            raise typer.Exit(0)
+        for verdict in accepted:
+            for key, description in verdict.descriptions.items():
+                tool = loaded.toolset[key]
+                overrides[(tool.server, tool.name)] = description
+        if dry_run:
+            console.print(f"{label('saved')} nothing (dry run)")
+            raise typer.Exit(0)
+        save_overrides(overrides, settings.overrides_file)
+        console.print(
+            f"{label('saved')} {len(accepted)} verified rewrites to {settings.overrides_file}"
+        )
+        console.print(f"{label('next')} tooltangle check {source}")
+
+
+async def run_fix(
+    workspace: Workspace, tested: Toolset, dataset: Dataset, max_pairs: int, attempts: int
+) -> list[Verdict | None]:
+    client = workspace.target()
+
+    with console.status("") as status:
+
+        async def pick(toolset: Toolset, queries: list) -> dict:
+            done = 0
+
+            def advance() -> None:
+                nonlocal done
+                done += 1
+                status.update(f"asking {model_name(client.spec)} ({done}/{len(queries)})...")
+
+            return await pick_tools(workspace, client, toolset, queries, advance)
+
+        baseline = await pick(tested, dataset.queries)
+        evaluation = evaluate(client.spec, dataset.queries, baseline)
+        chosen = confused_pairs(evaluation, max_pairs)
+        if not chosen:
+            console.print("no confused pairs to fix")
+            return []
+
+        fixer = Fixer(tested, dataset, workspace.generator(), pick, attempts)
+        verdicts = []
+        for pair in chosen:
+            status.update(f"working on {pair[0]} and {pair[1]}...")
+            verdict = await fixer.try_pair(pair, evaluation, baseline)
+            print_verdict(console, pair, verdict)
+            verdicts.append(verdict)
+    return verdicts
