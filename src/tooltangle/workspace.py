@@ -1,6 +1,8 @@
 from collections.abc import Callable
+from dataclasses import dataclass, field
 
 from tooltangle.dataset import Dataset, Query
+from tooltangle.findings import estimate_definition_tokens
 from tooltangle.generation import GenerationReport, QueryGenerator, plan_generation
 from tooltangle.models import Cache, FallbackClient, ModelClient, UsageLog
 from tooltangle.runner import Pick, Runner
@@ -56,6 +58,40 @@ class Workspace:
 
     def __exit__(self, *exc_info: object) -> None:
         self.close()
+
+
+PROMPT_OVERHEAD_TOKENS = 80
+
+
+@dataclass
+class Estimate:
+    generator_calls: int = 0
+    target_calls: dict[str, int] = field(default_factory=dict)
+    tokens_per_call: int = 0
+
+    @property
+    def total_calls(self) -> int:
+        return self.generator_calls + sum(self.target_calls.values())
+
+
+def tokens_per_call(toolset: Toolset) -> int:
+    return estimate_definition_tokens(toolset) + PROMPT_OVERHEAD_TOKENS
+
+
+def estimate_check(workspace: Workspace, toolset: Toolset, specs: list[str]) -> Estimate:
+    settings = workspace.settings
+    existing = workspace.dataset()
+    plan = plan_generation(toolset, existing)
+    estimate = Estimate(tokens_per_call=tokens_per_call(toolset))
+    if not plan.is_empty:
+        estimate.generator_calls = plan.estimated_calls(settings, len(toolset))
+
+    queries = plan.kept if existing else []
+    new_queries = 0 if plan.is_empty else plan.estimated_queries(settings, len(toolset))
+    for spec in specs:
+        runner = Runner(workspace.target(spec), toolset, settings.system_prompt)
+        estimate.target_calls[spec] = len(runner.uncached(queries)) + new_queries
+    return estimate
 
 
 async def prepare_dataset(

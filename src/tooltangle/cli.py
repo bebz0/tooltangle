@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 from collections.abc import Callable, Coroutine, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -27,7 +28,7 @@ from tooltangle.render import (
 from tooltangle.report import build_report, write_report
 from tooltangle.settings import Settings, SettingsError, load_settings
 from tooltangle.sources import KNOWN_CLIENTS, LoadedTools, SourceError, load_tools
-from tooltangle.workspace import Workspace, pick_tools, prepare_dataset
+from tooltangle.workspace import Estimate, Workspace, estimate_check, pick_tools, prepare_dataset
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -35,6 +36,8 @@ app = typer.Typer(
     help="Find which tools your LLM agent confuses and fix their descriptions with proof.",
 )
 console = Console(highlight=False)
+
+CONFIRM_ABOVE = 25
 
 Source = Annotated[
     str,
@@ -51,6 +54,7 @@ GeneratorOption = Annotated[
     str | None,
     typer.Option("--generator", "-g", help="Model that writes and labels the test messages."),
 ]
+YesOption = Annotated[bool, typer.Option("--yes", "-y", help="Don't ask before model calls.")]
 Timeout = Annotated[float, typer.Option(help="Seconds to wait for each MCP server.")]
 
 
@@ -95,6 +99,29 @@ def load(source: str, timeout: float) -> LoadedTools:
     if not len(loaded.toolset):
         fail("no tools were loaded")
     return loaded
+
+
+def confirm_cost(estimate: Estimate, workspace: Workspace, yes: bool) -> None:
+    if yes or estimate.total_calls <= CONFIRM_ABOVE:
+        return
+    parts = []
+    if estimate.generator_calls:
+        parts.append(
+            f"~{estimate.generator_calls} calls to {model_name(workspace.settings.generator)} "
+            "to write and label test messages"
+        )
+    for spec, calls in estimate.target_calls.items():
+        if not calls:
+            continue
+        tokens = calls * estimate.tokens_per_call
+        cost = workspace.usage.cost(spec, tokens, 0)
+        price = f", ≈ ${cost:.2f} at paid-tier prices" if cost else ""
+        parts.append(f"~{calls} calls to {model_name(spec)} (~{tokens:,} input tokens{price})")
+    console.print("this run makes " + "\n  and ".join(parts))
+    if not sys.stdin.isatty():
+        fail("pass --yes to run it without a prompt")
+    if not typer.confirm("continue?"):
+        raise typer.Exit(1)
 
 
 @contextmanager
@@ -149,12 +176,15 @@ def check(
     source: Source,
     model: ModelOption = None,
     generator: GeneratorOption = None,
+    yes: YesOption = False,
     timeout: Timeout = 60,
 ) -> None:
     """Measure which tools the model confuses and report what to fix."""
     settings = get_settings(model=model, generator=generator)
     loaded = load(source, timeout)
     with Workspace(settings, show_event) as workspace:
+        estimate = estimate_check(workspace, loaded.toolset, [settings.model])
+        confirm_cost(estimate, workspace, yes)
         report = run_async(workspace, run_check(workspace, loaded))
 
     has_errors = any(finding["severity"] == Severity.ERROR for finding in report["findings"])
