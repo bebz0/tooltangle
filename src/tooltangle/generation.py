@@ -3,6 +3,7 @@ import hashlib
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
+from math import ceil
 
 from pydantic import BaseModel, Field
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -80,6 +81,38 @@ class Draft:
 
 
 @dataclass
+class GenerationPlan:
+    kept: list[Query]
+    tools: list[str]
+    needs_pairs: bool
+    needs_no_tool: bool
+    relabel: bool
+    generators: list[str] = field(default_factory=list)
+
+    @property
+    def is_empty(self) -> bool:
+        return not (self.tools or self.needs_pairs or self.needs_no_tool or self.relabel)
+
+    def estimated_queries(self, settings: Settings, tool_count: int) -> int:
+        queries = len(self.tools) * settings.queries_per_tool
+        if self.needs_pairs:
+            queries += settings.contrast_pairs * 2 * settings.queries_per_contrast
+        if self.needs_no_tool:
+            queries += no_tool_count(settings, tool_count)
+        return queries
+
+    def estimated_calls(self, settings: Settings, tool_count: int) -> int:
+        calls = ceil(len(self.tools) / PLAIN_BATCH)
+        if self.needs_pairs:
+            calls += 1 + settings.contrast_pairs
+        if self.needs_no_tool:
+            calls += ceil(no_tool_count(settings, tool_count) / NO_TOOL_BATCH)
+        relabeled = len(self.kept) if self.relabel else 0
+        new_queries = self.estimated_queries(settings, tool_count)
+        return calls + ceil((new_queries + relabeled) / LABEL_BATCH)
+
+
+@dataclass
 class GenerationReport:
     generated: int = 0
     kept: int = 0
@@ -92,6 +125,30 @@ LABELING_VERSION = hashlib.sha256(prompts.LABELS.encode()).hexdigest()[:12]
 
 def no_tool_count(settings: Settings, tool_count: int) -> int:
     return max(6, round(NO_TOOL_SHARE * tool_count * settings.queries_per_tool))
+
+
+def plan_generation(toolset: Toolset, existing: Dataset | None) -> GenerationPlan:
+    if existing is None:
+        return GenerationPlan([], toolset.keys, True, True, False)
+
+    kept = []
+    for query in existing.queries:
+        if query.tool is not None and query.tool not in toolset:
+            continue
+        accepted = [key for key in query.accepted if key in toolset]
+        kept.append(query.model_copy(update={"accepted": accepted}))
+
+    covered = {query.tool for query in kept if query.kind == "plain"}
+    new_tools = [key for key in toolset.keys if key not in covered]
+    return GenerationPlan(
+        kept=kept,
+        tools=new_tools,
+        needs_pairs=bool(new_tools) or not any(query.kind == "contrast" for query in kept),
+        needs_no_tool=not any(query.kind == "no_tool" for query in kept),
+        relabel=bool(set(toolset.keys) - set(existing.info.labeled_tools))
+        or existing.info.labeling != LABELING_VERSION,
+        generators=existing.info.generators,
+    )
 
 
 class QueryGenerator:
@@ -109,30 +166,45 @@ class QueryGenerator:
         self.catalog = toolset.catalog()
         self.semaphore = asyncio.Semaphore(settings.concurrency)
 
-    async def build(self) -> tuple[Dataset, GenerationReport]:
+    async def build(self, plan: GenerationPlan) -> tuple[Dataset, GenerationReport]:
         report = GenerationReport()
-        report.pairs = await self.confusable_pairs()
+        covered_pairs = {
+            frozenset((query.tool, query.against)) for query in plan.kept if query.against
+        }
 
-        keys = self.toolset.keys
-        batches = [keys[start : start + PLAIN_BATCH] for start in range(0, len(keys), PLAIN_BATCH)]
+        if plan.needs_pairs:
+            pairs = await self.confusable_pairs()
+            report.pairs = [pair for pair in pairs if frozenset(pair) not in covered_pairs]
+
+        batches = [
+            plan.tools[start : start + PLAIN_BATCH]
+            for start in range(0, len(plan.tools), PLAIN_BATCH)
+        ]
         jobs = [self.plain_queries(batch) for batch in batches]
         jobs += [self.contrast_queries(first, second) for first, second in report.pairs]
-        total = no_tool_count(self.settings, len(self.toolset))
-        for start in range(0, total, NO_TOOL_BATCH):
-            jobs.append(self.no_tool_queries(min(NO_TOOL_BATCH, total - start)))
+        if plan.needs_no_tool:
+            total = no_tool_count(self.settings, len(self.toolset))
+            for start in range(0, total, NO_TOOL_BATCH):
+                jobs.append(self.no_tool_queries(min(NO_TOOL_BATCH, total - start)))
 
         drafts = [draft for batch in await asyncio.gather(*jobs) for draft in batch]
         report.generated = len(drafts)
-        drafts = self.clean(drafts, report)
+        drafts = self.clean(drafts, {query.text.casefold() for query in plan.kept}, report)
 
-        queries = await self.label(drafts, report)
-        assign_splits(queries)
+        kept = plan.kept
+        if plan.relabel:
+            kept = await self.relabel(kept, report)
+        new_queries = await self.label(drafts, report)
+        assign_splits(new_queries, kept)
 
         order: dict[str | None, int] = {key: index for index, key in enumerate(self.toolset.keys)}
-        queries.sort(key=lambda query: (order.get(query.tool, len(order)), query.kind, query.id))
+        queries = sorted(
+            kept + new_queries,
+            key=lambda query: (order.get(query.tool, len(order)), query.kind, query.id),
+        )
         report.kept = len(queries)
         info = DatasetInfo(
-            generators=sorted(self.client.used),
+            generators=sorted(set(self.client.used) | set(plan.generators)),
             language=self.settings.language,
             labeled_tools=self.toolset.keys,
             labeling=LABELING_VERSION,
@@ -202,8 +274,8 @@ class QueryGenerator:
             unique.setdefault(frozenset((first, second)), (first, second))
         return list(unique.values())[:limit]
 
-    def clean(self, drafts: list[Draft], report: GenerationReport) -> list[Draft]:
-        seen = set()
+    def clean(self, drafts: list[Draft], seen: set[str], report: GenerationReport) -> list[Draft]:
+        seen = set(seen)
         cleaned = []
         for draft in drafts:
             text = " ".join(draft.text.split())
@@ -261,6 +333,16 @@ class QueryGenerator:
             if query:
                 queries.append(query)
         return queries
+
+    async def relabel(self, queries: list[Query], report: GenerationReport) -> list[Query]:
+        drafts = [Draft(query.text, query.tool, query.kind, query.against) for query in queries]
+        labels = await self.labels_for([draft.text for draft in drafts])
+        relabeled = []
+        for query, draft, labeled in zip(queries, drafts, labels, strict=True):
+            fresh = self.to_query(draft, labeled, report)
+            if fresh:
+                relabeled.append(fresh.model_copy(update={"split": query.split}))
+        return relabeled
 
     def to_query(
         self, draft: Draft, labeled: set[str] | None, report: GenerationReport

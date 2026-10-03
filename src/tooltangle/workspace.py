@@ -1,7 +1,7 @@
 from collections.abc import Callable
 
 from tooltangle.dataset import Dataset, Query
-from tooltangle.generation import GenerationReport, QueryGenerator
+from tooltangle.generation import GenerationReport, QueryGenerator, plan_generation
 from tooltangle.models import Cache, FallbackClient, ModelClient, UsageLog
 from tooltangle.runner import Pick, Runner
 from tooltangle.settings import Settings
@@ -62,10 +62,11 @@ async def prepare_dataset(
     workspace: Workspace, toolset: Toolset, on_call: Callable[[], None] = lambda: None
 ) -> tuple[Dataset, GenerationReport | None]:
     existing = workspace.dataset()
-    if existing is not None:
+    plan = plan_generation(toolset, existing)
+    if existing is not None and plan.is_empty:
         return existing, None
     generator = QueryGenerator(toolset, workspace.generator(), workspace.settings, on_call)
-    dataset, report = await generator.build()
+    dataset, report = await generator.build(plan)
     dataset.save(workspace.settings.dataset_path)
     return dataset, report
 
