@@ -250,6 +250,29 @@ class QueryGenerator:
             Draft(text, second, "contrast", first) for text in answer.second[:count]
         ]
 
+    async def more_contrast(
+        self, pair: tuple[str, str], existing: list[Query], count: int
+    ) -> list[Query]:
+        first, second = pair
+        shown = [f"- {query.text}" for query in existing if query.tool in pair][:40]
+        prompt = prompts.MORE_CONTRAST_QUERIES.format(
+            catalog=self.catalog,
+            count=count,
+            first=self.function(first),
+            second=self.function(second),
+            existing="\n".join(shown) or "(none yet)",
+            language=self.settings.language,
+        )
+        answer = await self.ask(ContrastRequests, prompt, "generate")
+        drafts = [Draft(text, first, "contrast", second) for text in answer.first[:count]]
+        drafts += [Draft(text, second, "contrast", first) for text in answer.second[:count]]
+
+        report = GenerationReport()
+        drafts = self.clean(drafts, {query.text.casefold() for query in existing}, report)
+        queries = await self.label(drafts, report)
+        assign_splits(queries, existing)
+        return queries
+
     async def no_tool_queries(self, count: int) -> list[Draft]:
         prompt = prompts.NO_TOOL_QUERIES.format(
             catalog=self.catalog, count=count, language=self.settings.language

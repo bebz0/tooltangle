@@ -19,7 +19,8 @@ from tooltangle.findings import (
     lookalike_pairs,
     static_findings,
 )
-from tooltangle.fixer import Fixer, Verdict, confused_pairs
+from tooltangle.fixer import TOP_UP_PER_SIDE, TOP_UP_ROUNDS, Fixer, Verdict, confused_pairs
+from tooltangle.generation import QueryGenerator
 from tooltangle.metrics import evaluate
 from tooltangle.models import ModelError, QuotaExhausted, model_name
 from tooltangle.overrides import OverridesError, apply_to_toolset, save_overrides
@@ -271,6 +272,12 @@ def fix(
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Show the verdicts without saving anything.")
     ] = False,
+    top_up: Annotated[
+        bool,
+        typer.Option(
+            "--top-up/--no-top-up", help="Write more messages for a pair when there are too few."
+        ),
+    ] = True,
     timeout: Timeout = 60,
 ) -> None:
     """Rewrite the descriptions of confused tools and keep only the proven ones."""
@@ -288,14 +295,16 @@ def fix(
 
         baseline_calls = len(Runner(workspace.target(), tested).uncached(dataset.queries))
         fix_calls = pairs * attempts * FIX_CALLS_PER_ATTEMPT
+        top_up_calls = pairs * TOP_UP_ROUNDS * 2 * TOP_UP_PER_SIDE if top_up else 0
         estimate = Estimate(
-            generator_calls=pairs * attempts,
-            target_calls={settings.model: baseline_calls + fix_calls},
+            generator_calls=pairs * (attempts + (TOP_UP_ROUNDS * 2 if top_up else 0)),
+            target_calls={settings.model: baseline_calls + fix_calls + top_up_calls},
             tokens_per_call=tokens_per_call(tested),
         )
         confirm_cost(estimate, workspace, yes)
-        verdicts = run_async(workspace, run_fix(workspace, tested, dataset, pairs, attempts))
-
+        verdicts = run_async(
+            workspace, run_fix(workspace, loaded, tested, dataset, pairs, attempts, top_up)
+        )
         accepted = [verdict for verdict in verdicts if verdict and verdict.accepted]
         console.print()
         print_usage(console, workspace.usage)
@@ -317,9 +326,24 @@ def fix(
 
 
 async def run_fix(
-    workspace: Workspace, tested: Toolset, dataset: Dataset, max_pairs: int, attempts: int
+    workspace: Workspace,
+    loaded: LoadedTools,
+    tested: Toolset,
+    dataset: Dataset,
+    max_pairs: int,
+    attempts: int,
+    top_up: bool,
 ) -> list[Verdict | None]:
+    settings = workspace.settings
     client = workspace.target()
+    writer = QueryGenerator(loaded.toolset, workspace.generator(), settings)
+
+    async def more_messages(pair: tuple[str, str]) -> list[Query]:
+        fresh = await writer.more_contrast(pair, dataset.queries, TOP_UP_PER_SIDE)
+        dataset.queries.extend(fresh)
+        dataset.info.generators = sorted(set(dataset.info.generators) | set(writer.client.used))
+        dataset.save(settings.dataset_path)
+        return fresh
 
     with console.status("") as status:
 
@@ -340,7 +364,14 @@ async def run_fix(
             console.print("no confused pairs to fix")
             return []
 
-        fixer = Fixer(tested, dataset, workspace.generator(), pick, attempts)
+        fixer = Fixer(
+            tested,
+            dataset,
+            workspace.generator(),
+            pick,
+            attempts,
+            more_messages if top_up else None,
+        )
         verdicts = []
         for pair in chosen:
             status.update(f"working on {pair[0]} and {pair[1]}...")

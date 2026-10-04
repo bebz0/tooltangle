@@ -56,3 +56,25 @@ def test_fix_rejects_a_useless_rewrite(project, write_config, notes_server, use_
     assert result.exit_code == 0, result.stdout
     assert "not proven better" in result.stdout
     assert not (project / "tooltangle.overrides.yaml").exists()
+
+
+def test_fix_writes_more_messages_when_a_pair_is_thin(
+    project, write_config, notes_server, use_fake_models
+):
+    config = setup(
+        project,
+        write_config,
+        notes_server,
+        use_fake_models,
+        GOOD_FIX,
+        queries_per_tool=4,
+        queries_per_contrast=2,
+    )
+    before = len((project / ".tooltangle/queries.jsonl").read_text().splitlines())
+
+    result = runner.invoke(app, ["fix", config, "--yes"])
+    assert result.exit_code == 0, result.stdout
+    assert "more messages for this pair" in result.stdout
+    assert "✓ accepted" in result.stdout
+    after = len((project / ".tooltangle/queries.jsonl").read_text().splitlines())
+    assert after > before

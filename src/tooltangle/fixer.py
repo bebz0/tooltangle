@@ -18,6 +18,8 @@ ALPHA = 0.05
 TOLERATED_REGRESSIONS = 1
 EXAMPLES = 6
 RELATED_TOOLS = 6
+TOP_UP_ROUNDS = 2
+TOP_UP_PER_SIDE = 8
 
 
 class NewDescription(BaseModel):
@@ -46,6 +48,7 @@ class Verdict:
     others_broken: int
     alpha: float = ALPHA
     needed: int = 0
+    added: int = 0
     underpowered: bool = False
 
     @property
@@ -113,12 +116,14 @@ class Fixer:
         generator: FallbackClient,
         pick: Callable[[Toolset, list[Query]], Awaitable[dict[str, Pick]]],
         attempts: int = 2,
+        top_up: Callable[[tuple[str, str]], Awaitable[list[Query]]] | None = None,
     ):
         self.toolset = toolset
         self.dataset = dataset
         self.generator = generator
         self.pick = pick
         self.attempts = attempts
+        self.top_up = top_up
 
     def function(self, key: str) -> str:
         return self.toolset.function_names[key]
@@ -179,6 +184,19 @@ class Fixer:
         other_queries = [query for query in holdout if query.tool in related or query.tool is None]
         before = await self.pick(self.toolset, pair_queries + other_queries)
 
+        added = 0
+        for _ in range(TOP_UP_ROUNDS):
+            if self.top_up is None or count_errors(pair_queries, before) >= needed:
+                break
+            fresh = await self.top_up(pair)
+            if not fresh:
+                break
+            added += len(fresh)
+            self.dataset.queries.extend(fresh)
+            before |= await self.pick(self.toolset, fresh)
+            picks = picks | before
+            pair_queries += [query for query in fresh if query.split == "holdout"]
+
         errors = count_errors(pair_queries, before)
         if errors < needed:
             return Verdict(
@@ -196,6 +214,7 @@ class Fixer:
                 others_broken=0,
                 alpha=alpha,
                 needed=needed,
+                added=added,
                 underpowered=True,
             )
 
@@ -210,7 +229,7 @@ class Fixer:
             last = compare(
                 pair, descriptions, fix.reasoning, pair_queries, other_queries, before, after
             )
-            last.alpha, last.needed = alpha, needed
+            last.alpha, last.needed, last.added = alpha, needed, added
             if last.accepted:
                 self.toolset = candidate
                 return last

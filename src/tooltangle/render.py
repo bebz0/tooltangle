@@ -116,6 +116,8 @@ def print_verdict(console: Console, pair: tuple[str, str], verdict: Verdict | No
     if verdict is None:
         console.print("  [yellow]✗ no usable rewrite[/yellow]")
         return
+    if verdict.added:
+        console.print(f"  [dim]wrote {verdict.added} more messages for this pair[/dim]")
     if verdict.underpowered:
         console.print(
             f"  [yellow]✗ only {verdict.before_errors} mistakes on {verdict.evaluated} unseen "

@@ -98,3 +98,22 @@ Your previous rewrite was tested on messages you haven't seen: it fixed {fixed} 
 broke {broken} of them for this pair, and broke {others_broken} messages for other tools. \
 Try a different approach.
 """
+
+MORE_CONTRAST_QUERIES = """\
+You are building a test set for an AI assistant that can call tools.
+These are all the tools the assistant can see:
+
+{catalog}
+
+Two of them are easy to mix up: `{first}` and `{second}`. These messages already exist:
+
+{existing}
+
+Write {count} new messages where the best first step is `{first}`, and {count} new \
+messages where it is `{second}`. Make them tricky in the same way: each message should \
+touch the domain of the other tool, so that only a careful reading of both descriptions \
+routes it correctly. Don't repeat or lightly reword the existing messages.
+
+- Never mention any tool by name.
+- Sound like real users and include concrete details when natural.
+- Write the messages in {language}."""
