@@ -37,7 +37,7 @@ from tooltangle.render import (
     print_usage,
     print_verdict,
 )
-from tooltangle.report import build_report, write_report
+from tooltangle.report import build_report, write_html, write_report
 from tooltangle.runner import Pick, Runner
 from tooltangle.settings import Settings, SettingsError, load_settings
 from tooltangle.sources import KNOWN_CLIENTS, LoadedTools, SourceError, load_tools
@@ -258,9 +258,10 @@ async def run_check(
     print_usage(console, workspace.usage)
 
     report = build_report(evaluation, findings, dataset.queries, picks, tested)
-    report_path = settings.state_dir / "report.json"
-    write_report(report, report_path)
-    console.print(f"{label('saved')} {settings.dataset_path} · {report_path}")
+    write_report(report, settings.state_dir / "report.json")
+    html_path = settings.state_dir / "report.html"
+    write_html(report, html_path)
+    console.print(f"{label('saved')} {settings.dataset_path} · {html_path}")
     return report
 
 

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>tooltangle report</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #222; max-width: 1000px; margin: 30px auto; padding: 0 20px; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  h2 { font-size: 17px; margin-top: 36px; padding-bottom: 4px; border-bottom: 1px solid #ccc; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ccc; padding: 5px 8px; text-align: left; vertical-align: top; }
+  th { background: #f0f0f0; font-weight: normal; }
+  td.num { text-align: right; white-space: nowrap; }
+  code { font-size: 13px; }
+  .summary { width: auto; }
+  .summary th { width: 110px; }
+  .findings { padding-left: 0; list-style: none; }
+  .findings li { margin-bottom: 10px; }
+  .error { color: #b00020; font-weight: bold; }
+  .warn { color: #9a5b00; font-weight: bold; }
+  .info { color: #1a5fb4; font-weight: bold; }
+  .detail { color: #666; }
+  .example { color: #666; margin: 2px 0 0 52px; }
+  .matrix { width: auto; }
+  .matrix td { text-align: center; min-width: 28px; }
+  .matrix th.col { writing-mode: vertical-rl; transform: rotate(180deg); text-align: left; }
+  .matrix td.wrong { background: #fbdada; }
+  .matrix td.right { background: #dff0df; }
+  .bad { color: #b00020; }
+  .ok { color: #1a7f37; }
+  .filters input[type=search] { width: 260px; padding: 4px; }
+  .filters label { margin-left: 12px; }
+</style>
+</head>
+<body>
+<h1>tooltangle report</h1>
+<p>{{ report.model }}, {{ report.created_at }}</p>
+
+<table class="summary">
+  <tr><th>accuracy</th><td>{{ "%.2f"|format(report.accuracy) }} (95% interval {{ "%.2f"|format(report.interval[0]) }} to {{ "%.2f"|format(report.interval[1]) }})</td></tr>
+  <tr><th>messages</th><td>{{ report.evaluated }}{% if report.failed %}, {{ report.failed }} failed{% endif %}</td></tr>
+  <tr><th>tools</th><td>{{ report.tools|length }}</td></tr>
+  <tr><th>definitions</th><td>about {{ "{:,}".format(report.definition_tokens) }} tokens per request</td></tr>
+</table>
+
+<h2>Findings</h2>
+<ul class="findings">
+  {% for finding in report.findings %}
+  <li>
+    <span class="{{ finding.severity }}">{{ finding.severity|upper }}</span>
+    {{ finding.title }}
+    {% if finding.detail %}<span class="detail">{{ finding.detail }}</span>{% endif %}
+    {% for example in finding.examples %}<div class="example">e.g. {{ example }}</div>{% endfor %}
+  </li>
+  {% else %}
+  <li>Nothing to report.</li>
+  {% endfor %}
+</ul>
+
+{% if matrix.labels %}
+<h2>Confusion matrix</h2>
+<p>Rows: the tool a message was written for. Columns: the tool the model called.</p>
+<table class="matrix">
+  <tr>
+    <th></th>
+    {% for label in matrix.labels %}<th class="col">{{ label }}</th>{% endfor %}
+  </tr>
+  {% for expected in matrix.labels %}
+  <tr>
+    <th>{{ expected }}</th>
+    {% for picked in matrix.labels %}
+    {% set count = matrix.cells.get(expected ~ "|" ~ picked, 0) %}
+    <td class="{% if count %}{{ 'right' if expected == picked else 'wrong' }}{% endif %}">{{ count or "" }}</td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>Tools</h2>
+<table>
+  <tr><th>tool</th><th>messages</th><th>accuracy</th><th>precision</th><th>description</th></tr>
+  {% for key, tool in tools %}
+  <tr>
+    <td><code>{{ key }}</code></td>
+    <td class="num">{{ tool.queries }}</td>
+    <td class="num{% if tool.accuracy is not none and tool.accuracy < 0.8 %} bad{% endif %}">
+      {{ "%.0f%%"|format(tool.accuracy * 100) if tool.accuracy is not none else "-" }}
+    </td>
+    <td class="num">{{ "%.0f%%"|format(tool.precision * 100) if tool.precision is not none else "-" }}</td>
+    <td>{{ tool.description|truncate(160) }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>Messages</h2>
+<p class="filters">
+  <input type="search" id="search" placeholder="filter">
+  <label><input type="checkbox" id="mistakes" checked> only mistakes</label>
+</p>
+<table id="messages">
+  <tr><th>message</th><th>written for</th><th>model called</th><th>split</th></tr>
+  {% for row in report.queries %}
+  <tr data-correct="{{ 'yes' if row.correct else 'no' }}">
+    <td>{{ row.text }}</td>
+    <td>
+      <code>{{ row.tool or "no tool" }}</code>
+      {% if row.accepted|length > 1 %}
+      <br><small>also fine: {{ row.accepted|reject("equalto", row.tool)|join(", ") }}</small>
+      {% endif %}
+    </td>
+    <td class="{{ 'ok' if row.correct else 'bad' }}"><code>{{ row.picked|pick }}</code></td>
+    <td>{{ row.split }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<script>
+  var search = document.getElementById("search");
+  var mistakes = document.getElementById("mistakes");
+
+  function filter() {
+    var text = search.value.toLowerCase();
+    var rows = document.querySelectorAll("#messages tr[data-correct]");
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      var hide = (mistakes.checked && row.dataset.correct === "yes")
+        || row.textContent.toLowerCase().indexOf(text) === -1;
+      row.style.display = hide ? "none" : "";
+    }
+  }
+
+  search.addEventListener("input", filter);
+  mistakes.addEventListener("change", filter);
+  filter();
+</script>
+</body>
+</html>

@@ -10,7 +10,7 @@ from tooltangle.runner import Pick, Runner
 from tooltangle.settings import Settings
 from tooltangle.toolset import Toolset
 
-STATE_GITIGNORE = "cache.sqlite*\nreport.json\n"
+STATE_GITIGNORE = "cache.sqlite*\nreport.html\nreport.json\n"
 
 
 class Workspace:

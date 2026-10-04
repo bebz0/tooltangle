@@ -33,6 +33,7 @@ def test_check_end_to_end(project, write_config, notes_server, fake_models):
     report = json.loads((project / ".tooltangle/report.json").read_text())
     assert report["tools"]["notes.search_notes"]["accuracy"] < 0.7
     assert (project / ".tooltangle/queries.jsonl").is_file()
+    assert "Confusion matrix" in (project / ".tooltangle/report.html").read_text()
 
     calls_before = sum(len(model.prompts) for model in fake_models)
     again = runner.invoke(app, ["check", str(config), "--yes"])
