@@ -262,6 +262,7 @@ async def run_check(
     html_path = settings.state_dir / "report.html"
     write_html(report, html_path)
     console.print(f"{label('saved')} {settings.dataset_path} · {html_path}")
+    console.print(f"{label('report')} {html_path.resolve().as_uri()}", soft_wrap=True)
     return report
 
 
