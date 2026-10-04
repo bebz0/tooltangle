@@ -3,6 +3,7 @@ from collections import Counter
 from rich.console import Console
 from rich.table import Table
 
+from tooltangle.compare import ModelResult
 from tooltangle.dataset import Dataset
 from tooltangle.findings import Finding, Severity, estimate_definition_tokens
 from tooltangle.fixer import Verdict
@@ -141,3 +142,32 @@ def print_verdict(console: Console, pair: tuple[str, str], verdict: Verdict | No
         console.print("  [yellow]✗ not proven better on unseen messages[/yellow]")
     else:
         console.print("  [yellow]✗ breaks other tools[/yellow]")
+
+
+def print_comparison(
+    console: Console, results: list[ModelResult], pick: ModelResult | None
+) -> None:
+    table = Table(box=None, pad_edge=False, header_style="dim")
+    for column in ("model", "accuracy", "missed", "needless", "p50", "$ / 1k", ""):
+        table.add_column(column, no_wrap=True)
+    for result in sorted(results, key=lambda result: result.evaluation.accuracy, reverse=True):
+        low, high = result.evaluation.interval
+        note = ""
+        if result.p_worse_than_best is not None:
+            verdict = "worse" if result.significantly_worse else "not significantly worse"
+            note = f"{verdict} than the best (p = {result.p_worse_than_best:.3f})"
+        table.add_row(
+            model_name(result.spec),
+            f"{result.evaluation.accuracy:.2f} [{low:.2f}, {high:.2f}]",
+            f"{result.missed_rate:.0%}",
+            f"{result.needless_rate:.0%}",
+            f"{result.median_latency:.1f}s" if result.median_latency else "-",
+            f"{result.cost_per_thousand:.2f}" if result.cost_per_thousand is not None else "?",
+            f"[dim]{note}[/dim]",
+        )
+    console.print(table)
+    if pick is not None:
+        console.print(
+            f"\n{label('pick')} [bold]{model_name(pick.spec)}[/bold] is the cheapest model "
+            "that isn't significantly worse than the best one"
+        )

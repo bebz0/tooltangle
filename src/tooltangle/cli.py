@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 
 from tooltangle import __version__
+from tooltangle.compare import ModelResult, rank, summarize
 from tooltangle.dataset import Dataset, Query
 from tooltangle.findings import (
     Severity,
@@ -26,6 +27,7 @@ from tooltangle.models import ModelError, QuotaExhausted, model_name
 from tooltangle.overrides import OverridesError, apply_to_toolset, save_overrides
 from tooltangle.render import (
     label,
+    print_comparison,
     print_findings,
     print_generation,
     print_lookalikes,
@@ -382,3 +384,47 @@ async def run_fix(
             print_verdict(console, pair, verdict)
             verdicts.append(verdict)
     return verdicts
+
+
+@app.command()
+def compare(
+    source: Source,
+    models: Annotated[
+        list[str], typer.Option("--model", "-m", help="A model to compare; repeat the option.")
+    ],
+    generator: GeneratorOption = None,
+    yes: YesOption = False,
+    timeout: Timeout = 60,
+) -> None:
+    """Run the same messages through several models and find the cheapest one that holds up."""
+    models = list(dict.fromkeys(models))
+    if len(models) < 2:
+        fail("pass at least two --model options")
+    settings = get_settings(generator=generator)
+    loaded = load(source, timeout)
+    with Workspace(settings, show_event) as workspace:
+        try:
+            tested = apply_to_toolset(loaded.toolset, workspace.overrides())
+        except OverridesError as error:
+            fail(str(error))
+        confirm_cost(estimate_check(workspace, loaded.toolset, tested, models), workspace, yes)
+        results, best = run_async(workspace, run_compare(workspace, loaded, tested, models))
+        print_comparison(console, results, best)
+        console.print()
+        print_usage(console, workspace.usage)
+
+
+async def run_compare(
+    workspace: Workspace, loaded: LoadedTools, tested: Toolset, models: list[str]
+) -> tuple[list[ModelResult], ModelResult | None]:
+    with console.status("writing test messages..."):
+        dataset, _ = await prepare_dataset(workspace, loaded.toolset)
+    dataset = allow_looking_first(dataset, tested)
+
+    picks, results = {}, []
+    for spec in models:
+        client = workspace.target(spec)
+        with progress_bar(f"asking {model_name(spec)}", len(dataset.queries)) as advance:
+            picks[spec] = await pick_tools(workspace, client, tested, dataset.queries, advance)
+        results.append(summarize(spec, dataset.queries, picks[spec], workspace.usage))
+    return results, rank(results, picks, dataset.queries)
