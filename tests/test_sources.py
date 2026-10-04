@@ -1,7 +1,7 @@
 from tooltangle.sources import load_python_tools, load_tools, parse_server, read_config
 
 
-def test_stdio_default_transport():
+def test_stdio_is_the_default_transport():
     server = parse_server("git", {"command": "uvx", "args": ["mcp-server-git"]})
     assert server.transport == "stdio"
     assert server.command == "uvx"
@@ -9,7 +9,7 @@ def test_stdio_default_transport():
     assert parse_server("remote", {"url": "https://example.com/mcp"}).transport == "http"
 
 
-def test_brokenentries_skipped_not_fatal(write_config):
+def test_broken_entries_are_skipped_not_fatal(write_config):
     path = write_config(
         {
             "ok": {"command": "uvx", "args": ["mcp-server-time"]},
@@ -22,7 +22,7 @@ def test_brokenentries_skipped_not_fatal(write_config):
     assert set(skipped) == {"off", "bad"}
 
 
-async def test_loads_tools_from_real_server(write_config, notes_server, broken_server):
+async def test_loads_tools_from_a_real_server(write_config, notes_server, broken_server):
     path = write_config({"notes": notes_server, "broken": broken_server})
     loaded = await load_tools(str(path), timeout=30)
 
@@ -33,6 +33,9 @@ async def test_loads_tools_from_real_server(write_config, notes_server, broken_s
         "notes.search_files",
     ]
     assert loaded.toolset["notes.create_note"].parameters["required"] == ["title", "body"]
+    assert loaded.toolset["notes.search_notes"].read_only is True
+    assert loaded.toolset["notes.create_note"].read_only is False
+    assert loaded.toolset["notes.search_files"].read_only is None
     assert "API_TOKEN is not set" in loaded.failures["broken"]
 
 

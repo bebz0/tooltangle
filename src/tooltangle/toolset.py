@@ -15,6 +15,7 @@ class ToolSpec:
     name: str
     description: str
     parameters: dict[str, Any] = field(default_factory=dict, compare=False)
+    read_only: bool | None = field(default=None, compare=False)
 
     @property
     def key(self) -> str:

@@ -21,7 +21,7 @@ from tooltangle.findings import (
 )
 from tooltangle.fixer import TOP_UP_PER_SIDE, TOP_UP_ROUNDS, Fixer, Verdict, confused_pairs
 from tooltangle.generation import QueryGenerator
-from tooltangle.metrics import evaluate
+from tooltangle.metrics import allow_looking_first, evaluate
 from tooltangle.models import ModelError, QuotaExhausted, model_name
 from tooltangle.overrides import OverridesError, apply_to_toolset, save_overrides
 from tooltangle.render import (
@@ -243,6 +243,7 @@ async def run_check(
 
         dataset, generation = await prepare_dataset(workspace, loaded.toolset, on_call)
     print_generation(console, generation, dataset)
+    dataset = allow_looking_first(dataset, tested)
 
     with progress_bar(f"asking {model_name(client.spec)}", len(dataset.queries)) as advance:
         picks = await pick_tools(workspace, client, tested, dataset.queries, advance)
@@ -336,6 +337,7 @@ async def run_fix(
 ) -> list[Verdict | None]:
     settings = workspace.settings
     client = workspace.target()
+    judged = allow_looking_first(dataset, tested)
     writer = QueryGenerator(loaded.toolset, workspace.generator(), settings)
 
     async def more_messages(pair: tuple[str, str]) -> list[Query]:
@@ -343,7 +345,8 @@ async def run_fix(
         dataset.queries.extend(fresh)
         dataset.info.generators = sorted(set(dataset.info.generators) | set(writer.client.used))
         dataset.save(settings.dataset_path)
-        return fresh
+        added = Dataset(info=dataset.info, queries=fresh)
+        return allow_looking_first(added, tested).queries
 
     with console.status("") as status:
 
@@ -357,8 +360,8 @@ async def run_fix(
 
             return await pick_tools(workspace, client, toolset, queries, advance)
 
-        baseline = await pick(tested, dataset.queries)
-        evaluation = evaluate(client.spec, dataset.queries, baseline)
+        baseline = await pick(tested, judged.queries)
+        evaluation = evaluate(client.spec, judged.queries, baseline)
         chosen = confused_pairs(evaluation, max_pairs)
         if not chosen:
             console.print("no confused pairs to fix")
@@ -366,7 +369,7 @@ async def run_fix(
 
         fixer = Fixer(
             tested,
-            dataset,
+            judged,
             workspace.generator(),
             pick,
             attempts,

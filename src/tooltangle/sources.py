@@ -211,6 +211,7 @@ async def _list_tools(server: ServerConfig, errlog: TextIO) -> list[ToolSpec]:
                 name=data["name"],
                 description=data.get("description", ""),
                 parameters=data.get("inputSchema") or EMPTY_PARAMETERS,
+                read_only=(data.get("annotations") or {}).get("readOnlyHint"),
             )
         )
     return specs

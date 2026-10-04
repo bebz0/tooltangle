@@ -21,6 +21,7 @@ class Query(BaseModel):
     kind: Kind
     split: Split = "dev"
     against: str | None = None
+    look_first: list[str] = Field(default_factory=list)
 
     @property
     def needs_tool(self) -> bool:
@@ -55,7 +56,10 @@ class Dataset(BaseModel):
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        lines = [query.model_dump_json(exclude_none=True) for query in self.queries]
+        lines = [
+            query.model_dump_json(exclude_none=True, exclude={"look_first"})
+            for query in self.queries
+        ]
         path.write_text("\n".join(lines) + "\n")
         info_path = path.with_suffix(".info.json")
         info_path.write_text(json.dumps(self.info.model_dump(), indent=2) + "\n")

@@ -1,9 +1,12 @@
 import pytest
 
-from tooltangle.dataset import Query
+from tooltangle.dataset import Dataset, DatasetInfo, Query
 from tooltangle.findings import Severity, evaluation_findings
-from tooltangle.metrics import evaluate
+from tooltangle.metrics import allow_looking_first, evaluate
 from tooltangle.runner import Pick
+from tooltangle.toolset import Toolset, ToolSpec
+
+INFO = DatasetInfo(generators=["g"], language="English", labeled_tools=[])
 
 
 def query(number: int, tool: str | None, accepted: list[str] | None = None) -> Query:
@@ -62,3 +65,36 @@ def test_findings_severity_follows_rate_and_count():
     ]
     assert findings[0].detail == "30% (3 of 10)"
     assert findings[0].examples == ['"message 7"']
+
+
+def test_looking_first_is_fine_but_reported():
+    toolset = Toolset(
+        [
+            ToolSpec("git", "git_status", "Show the working tree status.", read_only=True),
+            ToolSpec("git", "git_commit", "Record changes.", read_only=False),
+            ToolSpec("git", "git_checkout", "Switch branches.", read_only=False),
+            ToolSpec("time", "get_current_time", "Current time.", read_only=True),
+        ]
+    )
+    queries = [query(number, "git.git_commit") for number in range(4)]
+    queries.append(query(4, "git.git_status"))
+    dataset = allow_looking_first(Dataset(info=INFO, queries=queries), toolset)
+
+    assert dataset.queries[0].accepted == ["git.git_commit", "git.git_status"]
+    assert dataset.queries[0].look_first == ["git.git_status"]
+    assert dataset.queries[4].accepted == ["git.git_status"]
+
+    picks = {
+        "q0": Pick("q0", "git.git_status"),
+        "q1": Pick("q1", "git.git_status"),
+        "q2": Pick("q2", "git.git_checkout"),
+        "q3": Pick("q3", "time.get_current_time"),
+        "q4": Pick("q4", "git.git_commit"),
+    }
+    evaluation = evaluate("m", dataset.queries, picks)
+    assert evaluation.correct == 2
+    assert [(c.expected, c.picked, c.count) for c in evaluation.looked_first] == [
+        ("git.git_commit", "git.git_status", 2)
+    ]
+    findings = evaluation_findings(evaluation)
+    assert any(f.code == "looks-first" and f.severity == Severity.INFO for f in findings)

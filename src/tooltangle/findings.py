@@ -163,6 +163,18 @@ def evaluation_findings(evaluation: Evaluation) -> list[Finding]:
                     tools=(score.key,),
                 )
             )
+    for looked in evaluation.looked_first:
+        if looked.count >= WARN_COUNT:
+            findings.append(
+                Finding(
+                    Severity.INFO,
+                    "looks-first",
+                    f"{looked.expected}: the model first looks with {looked.picked}",
+                    detail=f"{looked.rate:.0%} ({looked.count} of {looked.total}), counted as fine",
+                    examples=[f'"{text}"' for text in looked.examples[:1]],
+                    tools=tuple(key for key in (looked.expected, looked.picked) if key),
+                )
+            )
 
     if evaluation.failed:
         findings.append(

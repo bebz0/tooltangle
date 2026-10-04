@@ -64,9 +64,11 @@ These are all the tools an AI assistant can see:
 {catalog}
 
 For each numbered message below, list every tool that would be a reasonable FIRST call \
-for handling it, using the tool names exactly as written above. Don't include tools that \
-are merely related. Return an empty list when the assistant should answer directly, or \
-when no tool can help.
+for handling it, using the tool names exactly as written above. That is the tool that \
+does what the user asked, plus any read-only tool a careful assistant would sensibly call \
+first to check something it needs, such as the current state before changing it. Don't \
+include tools that are merely related. Return an empty list when the assistant should \
+answer directly, or when no tool can help.
 
 {messages}"""
 
@@ -84,7 +86,6 @@ wrong one of the two:
 Messages it routed correctly:
 
 {successes}
-
 {feedback}
 Rewrite the description of one or both of these two tools so the boundary between them \
 is obvious. Rules:

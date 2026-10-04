@@ -3,10 +3,31 @@ from dataclasses import dataclass, field
 
 from scipy.stats import binomtest
 
-from tooltangle.dataset import Query
+from tooltangle.dataset import Dataset, Query
 from tooltangle.runner import Pick
+from tooltangle.toolset import Toolset
 
 Pair = tuple[str | None, str | None]
+
+
+def allow_looking_first(dataset: Dataset, toolset: Toolset) -> Dataset:
+    reads = [tool for tool in toolset if tool.read_only is True]
+    writes = {tool.key for tool in toolset if tool.read_only is False}
+    queries = []
+    for query in dataset.queries:
+        if query.accepted and all(key in writes for key in query.accepted):
+            servers = {toolset[key].server for key in query.accepted}
+            extra = [
+                tool.key
+                for tool in reads
+                if tool.server in servers and tool.key not in query.accepted
+            ]
+            if extra:
+                query = query.model_copy(
+                    update={"accepted": [*query.accepted, *extra], "look_first": extra}
+                )
+        queries.append(query)
+    return dataset.model_copy(update={"queries": queries})
 
 
 def is_correct(query: Query, pick: Pick) -> bool:
@@ -65,6 +86,7 @@ class Evaluation:
     no_tool_total: int
     no_tool_correct: int
     first_error: str | None = None
+    looked_first: list[Confusion] = field(default_factory=list)
 
     @property
     def accuracy(self) -> float:
@@ -78,6 +100,7 @@ class Evaluation:
 def evaluate(model: str, queries: list[Query], picks: dict[str, Pick]) -> Evaluation:
     tools: dict[str, ToolScore] = {}
     wrong: Counter[Pair] = Counter()
+    looked: Counter[Pair] = Counter()
     examples: dict[Pair, list[str]] = defaultdict(list)
     expected_totals: Counter[str | None] = Counter()
     total = correct = failed = no_tool_total = no_tool_correct = 0
@@ -113,10 +136,17 @@ def evaluate(model: str, queries: list[Query], picks: dict[str, Pick]) -> Evalua
         if not right:
             wrong[(query.tool, pick.tool)] += 1
             examples[(query.tool, pick.tool)].append(query.text)
+        elif pick.tool in query.look_first:
+            looked[(query.tool, pick.tool)] += 1
+            examples[(query.tool, pick.tool)].append(query.text)
 
     confusions = [
         Confusion(expected, picked, count, expected_totals[expected], examples[(expected, picked)])
         for (expected, picked), count in wrong.most_common()
+    ]
+    looked_first = [
+        Confusion(expected, picked, count, expected_totals[expected], examples[(expected, picked)])
+        for (expected, picked), count in looked.most_common()
     ]
     return Evaluation(
         model=model,
@@ -128,4 +158,5 @@ def evaluate(model: str, queries: list[Query], picks: dict[str, Pick]) -> Evalua
         no_tool_total=no_tool_total,
         no_tool_correct=no_tool_correct,
         first_error=first_error,
+        looked_first=looked_first,
     )
