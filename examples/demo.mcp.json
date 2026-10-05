@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem@2026.8.31", "."]
+    },
+    "git": {
+      "command": "uvx",
+      "args": ["mcp-server-git==2026.8.18", "--repository", "."]
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory@2026.8.31"]
+    },
+    "fetch": {
+      "command": "uvx",
+      "args": ["mcp-server-fetch==2026.8.18"]
+    },
+    "time": {
+      "command": "uvx",
+      "args": ["mcp-server-time==2026.8.18"]
+    }
+  }
+}

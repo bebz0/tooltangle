@@ -9,6 +9,17 @@ authors = [
     { name = "bebz0", email = "romanbizonua@gmail.com" }
 ]
 requires-python = ">=3.12"
+keywords = ["mcp", "llm", "agents", "tool-calling", "evaluation", "langchain"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Testing",
+]
 dependencies = [
     "httpx>=0.28.1",
     "jinja2>=3.1.6",
@@ -23,6 +34,10 @@ dependencies = [
     "scipy>=1.18",
     "typer>=0.27",
 ]
+
+[project.urls]
+Repository = "https://github.com/bebz0/tooltangle"
+Issues = "https://github.com/bebz0/tooltangle/issues"
 
 [project.scripts]
 tooltangle = "tooltangle.cli:app"
