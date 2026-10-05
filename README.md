@@ -103,7 +103,7 @@ them in your own agent:
 ```python
 from tooltangle import apply_overrides
 
-tools = apply_overrides(tools)   # LangChain tools; reads tooltangle.overrides.yaml
+tools = apply_overrides(tools)  # LangChain tools; reads tooltangle.overrides.yaml
 ```
 
 Apps like Claude Desktop or Cursor take descriptions straight from the server, so there a
