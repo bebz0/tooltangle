@@ -1,6 +1,5 @@
 # tooltangle
 
-[![ci](https://github.com/bebz0/tooltangle/actions/workflows/ci.yml/badge.svg)](https://github.com/bebz0/tooltangle/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/bebz0/tooltangle/blob/main/LICENSE)
 
 Find out which tools your LLM agent mixes up, and fix their descriptions with proof.
