@@ -23,6 +23,27 @@ def test_duplicate_names_get_server_prefix():
     assert toolset.key_for("made_up") is None
 
 
+def test_function_names_never_collide():
+    toolset = Toolset(
+        [
+            ToolSpec("a", "get.user", "Dotted name"),
+            ToolSpec("b", "get_user", "Same name once cleaned"),
+            ToolSpec("notes", "search", "Search notes"),
+            ToolSpec("files", "search", "Search files"),
+            ToolSpec("x", "notes_search", "Looks like a prefixed name"),
+            ToolSpec("long", "t" * 70 + "_one", "Cut to the same 64 characters"),
+            ToolSpec("long", "t" * 70 + "_two", "Cut to the same 64 characters"),
+        ]
+    )
+    names = toolset.function_names
+    assert names["a.get.user"] == "a_get_user"
+    assert names["b.get_user"] == "b_get_user"
+    assert names["x.notes_search"] == "x_notes_search"
+    assert len(set(names.values())) == len(names)
+    assert all(len(name) <= 64 for name in names.values())
+    assert all(toolset.key_for(name) == key for key, name in names.items())
+
+
 def test_fingerprint_follows_descriptions():
     toolset = make_toolset()
     changed = toolset.with_descriptions({"notes.read_note": "Open one note by title"})

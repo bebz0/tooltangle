@@ -7,6 +7,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 EMPTY_PARAMETERS = {"type": "object", "properties": {}}
+MAX_FUNCTION_NAME = 64
 
 
 @dataclass(frozen=True)
@@ -26,13 +27,7 @@ class Toolset:
     def __init__(self, tools: list[ToolSpec]):
         self.tools = list(tools)
         self.by_key = {tool.key: tool for tool in self.tools}
-        name_counts = Counter(tool.name for tool in self.tools)
-        self.function_names = {
-            tool.key: _function_name(
-                tool.name if name_counts[tool.name] == 1 else f"{tool.server}_{tool.name}"
-            )
-            for tool in self.tools
-        }
+        self.function_names = _function_names(self.tools)
         self._keys_by_function_name = {name: key for key, name in self.function_names.items()}
 
     def __iter__(self) -> Iterator[ToolSpec]:
@@ -99,4 +94,31 @@ def _function_name(name: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9_-]", "_", name)
     if not re.match(r"[A-Za-z_]", cleaned):
         cleaned = f"_{cleaned}"
-    return cleaned[:64]
+    return cleaned[:MAX_FUNCTION_NAME]
+
+
+def _function_names(tools: list[ToolSpec]) -> dict[str, str]:
+    names = {tool.key: _function_name(tool.name) for tool in tools}
+    prefixed: set[str] = set()
+    while True:
+        counts = Counter(names.values())
+        clashing = [
+            tool for tool in tools if counts[names[tool.key]] > 1 and tool.key not in prefixed
+        ]
+        if not clashing:
+            break
+        for tool in clashing:
+            names[tool.key] = _function_name(f"{tool.server}_{tool.name}")
+            prefixed.add(tool.key)
+
+    # names that still clash after the server prefix, or after being cut, get a number
+    taken: set[str] = set()
+    for key, base in names.items():
+        name, number = base, 1
+        while name in taken:
+            number += 1
+            suffix = f"_{number}"
+            name = base[: MAX_FUNCTION_NAME - len(suffix)] + suffix
+        taken.add(name)
+        names[key] = name
+    return names

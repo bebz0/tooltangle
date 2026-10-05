@@ -48,3 +48,15 @@ def test_check_asks_before_spending(project, write_config, notes_server, fake_mo
     assert result.exit_code == 2
     assert "pass --yes" in result.stdout
     assert all(not model.prompts for model in fake_models)
+
+
+def test_check_fails_when_no_request_succeeds(project, write_config, notes_server, use_fake_models):
+    def broken(text, tools):
+        raise RuntimeError("401 API key not valid")
+
+    use_fake_models(broken, fake_generator)
+    config = write_config({"notes": notes_server})
+    result = runner.invoke(app, ["check", str(config), "--yes"])
+    assert result.exit_code == 2, result.stdout
+    assert "requests failed" in result.stdout
+    assert not (project / ".tooltangle/report.json").exists()

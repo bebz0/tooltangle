@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from tooltangle.dataset import Dataset, Query
 from tooltangle.findings import estimate_definition_tokens
 from tooltangle.generation import GenerationReport, QueryGenerator, plan_generation
-from tooltangle.models import Cache, FallbackClient, ModelClient, UsageLog
+from tooltangle.models import Cache, FallbackClient, ModelClient, ModelError, UsageLog
 from tooltangle.overrides import Overrides, load_overrides
 from tooltangle.runner import Pick, Runner
 from tooltangle.settings import Settings
@@ -123,3 +123,9 @@ async def pick_tools(
     settings = workspace.settings
     runner = Runner(client, toolset, settings.system_prompt, settings.concurrency, on_pick)
     return await runner.run(queries)
+
+
+def require_answers(picks: dict[str, Pick]) -> None:
+    errors = [pick.error for pick in picks.values() if pick.error]
+    if errors and len(errors) == len(picks):
+        raise ModelError(f"all {len(errors)} requests failed, so nothing was measured: {errors[0]}")

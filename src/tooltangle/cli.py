@@ -48,6 +48,7 @@ from tooltangle.workspace import (
     estimate_check,
     pick_tools,
     prepare_dataset,
+    require_answers,
     tokens_per_call,
 )
 
@@ -249,6 +250,7 @@ async def run_check(
 
     with progress_bar(f"asking {model_name(client.spec)}", len(dataset.queries)) as advance:
         picks = await pick_tools(workspace, client, tested, dataset.queries, advance)
+    require_answers(picks)
 
     evaluation = evaluate(client.spec, dataset.queries, picks)
     findings = static_findings(tested) + evaluation_findings(evaluation)
@@ -365,6 +367,7 @@ async def run_fix(
             return await pick_tools(workspace, client, toolset, queries, advance)
 
         baseline = await pick(tested, judged.queries)
+        require_answers(baseline)
         evaluation = evaluate(client.spec, judged.queries, baseline)
         chosen = confused_pairs(evaluation, max_pairs)
         if not chosen:
@@ -428,5 +431,6 @@ async def run_compare(
         client = workspace.target(spec)
         with progress_bar(f"asking {model_name(spec)}", len(dataset.queries)) as advance:
             picks[spec] = await pick_tools(workspace, client, tested, dataset.queries, advance)
+        require_answers(picks[spec])
         results.append(summarize(spec, dataset.queries, picks[spec], workspace.usage))
     return results, rank(results, picks, dataset.queries)
