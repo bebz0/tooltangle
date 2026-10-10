@@ -1,6 +1,6 @@
 [project]
 name = "tooltangle"
-version = "0.1.0"
+version = "0.2.0"
 description = "Find which tools your LLM agent confuses and fix their descriptions with proof"
 readme = "README.md"
 license = "MIT"
