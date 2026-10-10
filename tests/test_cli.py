@@ -60,3 +60,12 @@ def test_check_fails_when_no_request_succeeds(project, write_config, notes_serve
     assert result.exit_code == 2, result.stdout
     assert "requests failed" in result.stdout
     assert not (project / ".tooltangle/report.json").exists()
+
+
+def test_check_without_an_api_key_says_which_one(project, write_config, notes_server, monkeypatch):
+    for key in ("GOOGLE_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    config = write_config({"notes": notes_server})
+    result = runner.invoke(app, ["check", str(config), "--yes"])
+    assert result.exit_code == 2, result.stdout
+    assert "GOOGLE_API_KEY" in result.stdout

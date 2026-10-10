@@ -211,10 +211,10 @@ def check(
     with Workspace(settings, show_event) as workspace:
         try:
             overrides = workspace.overrides() if use_overrides else {}
-        except OverridesError as error:
+            tested = apply_to_toolset(loaded.toolset, overrides)
+            estimate = estimate_check(workspace, loaded.toolset, tested, [settings.model])
+        except (OverridesError, ModelError) as error:
             fail(str(error))
-        tested = apply_to_toolset(loaded.toolset, overrides)
-        estimate = estimate_check(workspace, loaded.toolset, tested, [settings.model])
         confirm_cost(estimate, workspace, yes)
         report = run_async(workspace, run_check(workspace, loaded, tested, len(overrides)))
 
@@ -296,11 +296,10 @@ def fix(
             fail(f"no test messages yet, run: tooltangle check {source}")
         try:
             overrides = workspace.overrides()
-        except OverridesError as error:
+            tested = apply_to_toolset(loaded.toolset, overrides)
+            baseline_calls = len(Runner(workspace.target(), tested).uncached(dataset.queries))
+        except (OverridesError, ModelError) as error:
             fail(str(error))
-        tested = apply_to_toolset(loaded.toolset, overrides)
-
-        baseline_calls = len(Runner(workspace.target(), tested).uncached(dataset.queries))
         fix_calls = pairs * attempts * FIX_CALLS_PER_ATTEMPT
         top_up_calls = pairs * TOP_UP_ROUNDS * 2 * TOP_UP_PER_SIDE if top_up else 0
         estimate = Estimate(
@@ -410,9 +409,10 @@ def compare(
     with Workspace(settings, show_event) as workspace:
         try:
             tested = apply_to_toolset(loaded.toolset, workspace.overrides())
-        except OverridesError as error:
+            estimate = estimate_check(workspace, loaded.toolset, tested, models)
+        except (OverridesError, ModelError) as error:
             fail(str(error))
-        confirm_cost(estimate_check(workspace, loaded.toolset, tested, models), workspace, yes)
+        confirm_cost(estimate, workspace, yes)
         results, best = run_async(workspace, run_compare(workspace, loaded, tested, models))
         print_comparison(console, results, best)
         console.print()

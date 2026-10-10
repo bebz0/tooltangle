@@ -9,31 +9,22 @@ import warnings
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import cache
+from importlib.metadata import metadata
 from pathlib import Path
 from typing import Any
 
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 warnings.filterwarnings("ignore", message=r".*uses fixed sampling defaults.*")
 logging.getLogger("langchain_google_genai._function_utils").setLevel(logging.ERROR)
 logging.getLogger("google_genai.models").setLevel(logging.ERROR)
 
-# USD per 1M tokens (input, output), Gemini API paid tier, September 2026
-KNOWN_PRICES = {
-    "gemini-3.8-flash": (0.75, 3.75),
-    "gemini-3.7-flash": (0.75, 3.75),
-    "gemini-3.6-flash": (0.75, 3.75),
-    "gemini-3.5-flash": (1.50, 9.00),
-    "gemini-3.5-flash-lite": (0.30, 2.50),
-    "gemini-3.1-flash-lite": (0.25, 1.50),
-    "gemini-3.1-pro-preview": (2.00, 12.00),
-    "gemini-2.5-flash": (0.30, 2.50),
-}
-
 PROVIDERS_WITH_RETRIES = {"google_genai", "openai", "anthropic"}
+UNITS = {"ms": 0.001, "s": 1, "m": 60, "h": 3600}
 
 
 class ModelError(Exception):
@@ -49,14 +40,48 @@ def model_name(spec: str) -> str:
 
 
 def create_model(spec: str, **options: Any) -> BaseChatModel:
-    options.setdefault("temperature", 0)
-    if spec.split(":", 1)[0] in PROVIDERS_WITH_RETRIES:
+    provider = spec.split(":", 1)[0]
+    if provider in PROVIDERS_WITH_RETRIES:
         options.setdefault("max_retries", 2)
     try:
         model: BaseChatModel = init_chat_model(spec, **options)
-    except (ImportError, ValueError) as error:
+        # the profile says whether this model accepts a temperature at all
+        if "temperature" not in options and (model.profile or {}).get("temperature", True):
+            model = init_chat_model(spec, **options, temperature=0)
+    except ImportError as error:
+        if provider in (metadata("tooltangle").get_all("Provides-Extra") or []):
+            raise ModelError(
+                f"{spec} needs an extra package, install it with: "
+                f"pip install 'tooltangle[{provider}]'"
+            ) from error
+        raise ModelError(f"can't create model {spec!r}: {error}") from error
+    except ValidationError as error:
+        reasons = "; ".join(item["msg"].removeprefix("Value error, ") for item in error.errors())
+        raise ModelError(f"can't create model {spec!r}: {reasons}") from error
+    except Exception as error:
         raise ModelError(f"can't create model {spec!r}: {error}") from error
     return model
+
+
+@cache
+def listed_price(spec: str) -> tuple[float, float] | None:
+    from genai_prices import Usage, calc_price
+
+    provider, _, name = spec.rpartition(":")
+
+    def per_million(usage: Usage, provider_id: str | None) -> float:
+        price = calc_price(usage, model_ref=name, provider_id=provider_id)
+        return float(price.total_price) * 1000
+
+    for provider_id in (provider or None, None):
+        try:
+            return (
+                per_million(Usage(input_tokens=1000), provider_id),
+                per_million(Usage(output_tokens=1000), provider_id),
+            )
+        except Exception:
+            continue
+    return None
 
 
 def cache_key(*parts: Any) -> str:
@@ -101,24 +126,64 @@ class RateLimit:
     retry_after: float | None
     limit: int | None
     per_day: bool
+    out_of_credit: bool = False
+
+
+def status_code(error: Exception) -> int | None:
+    status = getattr(error, "status_code", None)
+    return status if isinstance(status, int) else None
+
+
+def seconds(duration: str) -> float | None:
+    parts = re.findall(r"(\d+(?:\.\d+)?)(ms|s|m|h)", duration)
+    return sum(float(number) * UNITS[unit] for number, unit in parts) if parts else None
+
+
+def retry_after(error: Exception, text: str) -> float | None:
+    headers = getattr(getattr(error, "response", None), "headers", None) or {}
+    try:
+        if headers.get("retry-after-ms"):
+            return float(headers["retry-after-ms"]) / 1000
+        if headers.get("retry-after"):
+            return float(headers["retry-after"])
+    except (TypeError, ValueError):
+        pass
+    stated = re.search(r"(?:retry|try again) in ([\d.hms]+)", text, re.IGNORECASE)
+    stated = stated or re.search(r"retryDelay'?\"?:\s*'?\"?([\d.hms]+)", text)
+    return seconds(stated.group(1)) if stated else None
 
 
 def parse_rate_limit(error: Exception) -> RateLimit | None:
     text = str(error)
-    if not re.search(r"\b429\b|RESOURCE_EXHAUSTED|rate.?limit", text, re.IGNORECASE):
+    status = status_code(error)
+    if status is None:
+        limited = bool(re.search(r"\b429\b|RESOURCE_EXHAUSTED|rate.?limit", text, re.IGNORECASE))
+    else:
+        limited = status == 429
+    if not limited:
         return None
-    retry = re.search(r"(?:retry|try again) in ([\d.]+)\s*s", text, re.IGNORECASE)
-    retry = retry or re.search(r"retryDelay'?\"?:\s*'?\"?([\d.]+)s", text)
-    limit = re.search(r"quotaValue'?\"?:\s*'?\"?(\d+)", text) or re.search(r"limit: (\d+)", text)
+    limit = (
+        re.search(r"quotaValue'?\"?:\s*'?\"?(\d+)", text)
+        or re.search(r"limit: (\d+)", text)
+        or re.search(r"requests per min \(RPM\): Limit (\d+)", text)
+    )
+    code = getattr(error, "code", None)
     return RateLimit(
-        retry_after=float(retry.group(1)) if retry else None,
+        retry_after=retry_after(error, text),
         limit=int(limit.group(1)) if limit else None,
-        per_day="PerDay" in text,
+        per_day=bool(re.search(r"PerDay|per day|\b[RT]PD\b", text)),
+        out_of_credit=code == "insufficient_quota" or "insufficient_quota" in text,
     )
 
 
 def is_transient(error: Exception) -> bool:
-    pattern = r"\b(500|502|503|504)\b|UNAVAILABLE|overloaded|high demand|DEADLINE_EXCEEDED"
+    status = status_code(error)
+    if status is not None:
+        return status == 408 or status >= 500
+    pattern = (
+        r"\b(500|502|503|504)\b|UNAVAILABLE|overloaded|high demand|DEADLINE_EXCEEDED"
+        r"|timed out|connection error"
+    )
     return bool(re.search(pattern, str(error), re.IGNORECASE))
 
 
@@ -157,7 +222,7 @@ class Usage:
 
 class UsageLog:
     def __init__(self, prices: dict[str, tuple[float, float]] | None = None):
-        self.prices = {**KNOWN_PRICES, **(prices or {})}
+        self.prices = prices or {}
         self.entries: dict[tuple[str, str], Usage] = defaultdict(Usage)
 
     def record(self, phase: str, spec: str, message: AIMessage | None) -> None:
@@ -172,7 +237,7 @@ class UsageLog:
         self.entries[(phase, spec)].cached += 1
 
     def price(self, spec: str) -> tuple[float, float] | None:
-        return self.prices.get(spec) or self.prices.get(model_name(spec))
+        return self.prices.get(spec) or self.prices.get(model_name(spec)) or listed_price(spec)
 
     def cost(self, spec: str, input_tokens: int, output_tokens: int) -> float | None:
         price = self.price(spec)
@@ -205,6 +270,7 @@ class ModelClient:
         self.spec = spec
         self.usage = usage
         self.cache = cache
+        self.options = options
         self.model = model or create_model(spec, **options)
         self.pacer = Pacer(requests_per_minute)
         self.max_attempts = max_attempts
@@ -230,6 +296,11 @@ class ModelClient:
                 last_error = error
                 limit = parse_rate_limit(error)
                 if limit is not None:
+                    if limit.out_of_credit:
+                        raise QuotaExhausted(
+                            f"the account behind {self.spec} is out of credit; finished calls "
+                            "are cached, so add credit or pick another model"
+                        ) from error
                     if limit.per_day:
                         per_day = f" ({limit.limit} requests per day)" if limit.limit else ""
                         raise QuotaExhausted(

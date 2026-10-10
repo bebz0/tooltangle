@@ -30,9 +30,19 @@ pip install tooltangle    # or install it into a project
 ```
 
 Set `GOOGLE_API_KEY` in your environment or in a `.env` file in the directory you run from.
-Gemini is the default and the only provider tested so far. Other providers go through
-LangChain (`pip install langchain-openai`, then `--model openai:<model name>`) and should
-work, but treat that as untried.
+Gemini is the default because its free tier is enough to try the tool.
+
+To test OpenAI models, install the extra, set `OPENAI_API_KEY` and name the model:
+
+```bash
+pip install "tooltangle[openai]"
+tooltangle check mcp.json --model openai:gpt-5.4-mini
+```
+
+The test messages are still written by Gemini unless you also pass
+`--generator openai:<model name>`. OpenAI support is new and not battle-tested yet. Other
+providers that LangChain supports can be tried the same way after installing their LangChain
+package, but they are untested.
 
 ## Usage
 
@@ -117,7 +127,7 @@ rewrite is a suggestion to pass on to the server's author.
 | 0 | nothing at ERROR level |
 | 1 | a tool loses at least 20% of its messages (3 or more) to one wrong choice, two tools share a name, or a tool has no description |
 | 2 | the run failed: a bad config, a model that can't be created, or every request failing |
-| 3 | the daily quota ran out |
+| 3 | the daily quota or the account's credit ran out |
 
 Commit `.tooltangle/queries.jsonl` so every run scores the same messages, and cache
 `.tooltangle/cache.sqlite` so a run with no changes makes no model calls. See
@@ -145,7 +155,8 @@ There are also `generator_fallbacks`, `contrast_pairs`, `queries_per_contrast`, 
 - Every model answer is cached, so running again without changes is free and an interrupted
   run picks up where it stopped.
 - Before making more than 25 model calls it prints an estimate and asks. `--yes` skips the
-  question.
+  question. Prices come from the public list in the `genai-prices` package; a `[prices]` table
+  in `tooltangle.toml` overrides them.
 - Requests are paced and retried on rate limits. When the generator's quota runs out, the next
   model in `generator_fallbacks` takes over.
 

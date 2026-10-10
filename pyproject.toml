@@ -21,6 +21,7 @@ classifiers = [
     "Topic :: Software Development :: Testing",
 ]
 dependencies = [
+    "genai-prices>=0.1.10",
     "httpx>=0.28.1",
     "jinja2>=3.1.6",
     "langchain>=1.4.2",
@@ -41,6 +42,11 @@ Issues = "https://github.com/bebz0/tooltangle/issues"
 
 [project.scripts]
 tooltangle = "tooltangle.cli:app"
+
+[project.optional-dependencies]
+openai = [
+    "langchain-openai>=1.7.0",
+]
 
 [build-system]
 requires = ["uv_build>=0.12.7,<0.13.0"]

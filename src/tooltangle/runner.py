@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
@@ -38,7 +39,16 @@ class Runner:
         self.on_pick = on_pick
 
     def cache_key(self, query: Query) -> str:
-        return cache_key("pick", self.client.spec, self.system_prompt, self.fingerprint, query.text)
+        parts: list[Any] = [
+            "pick",
+            self.client.spec,
+            self.system_prompt,
+            self.fingerprint,
+            query.text,
+        ]
+        if self.client.options:
+            parts.append(self.client.options)
+        return cache_key(*parts)
 
     def uncached(self, queries: list[Query]) -> list[Query]:
         if self.client.cache is None:

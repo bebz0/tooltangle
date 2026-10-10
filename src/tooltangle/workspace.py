@@ -34,7 +34,7 @@ class Workspace:
         )
 
     def generator(self) -> FallbackClient:
-        specs = dict.fromkeys([self.settings.generator, *self.settings.generator_fallbacks])
+        specs = dict.fromkeys([self.settings.generator, *self.settings.fallbacks])
         return FallbackClient(
             [
                 ModelClient(

@@ -7,10 +7,21 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 DEFAULT_SYSTEM_PROMPT = (
     "You are a helpful assistant. Use the available tools when they help with the user's request."
 )
+DEFAULT_FALLBACKS = [
+    "google_genai:gemini-3.7-flash",
+    "google_genai:gemini-3.6-flash",
+    "google_genai:gemini-3.5-flash",
+    "google_genai:gemini-2.5-flash",
+    "google_genai:gemma-4-31b-it",
+]
 
 
 class SettingsError(Exception):
     pass
+
+
+def provider_name(spec: str) -> str:
+    return spec.split(":", 1)[0]
 
 
 class Settings(BaseModel):
@@ -18,15 +29,7 @@ class Settings(BaseModel):
 
     model: str = "google_genai:gemini-3.5-flash-lite"
     generator: str = "google_genai:gemini-3.8-flash"
-    generator_fallbacks: list[str] = Field(
-        default_factory=lambda: [
-            "google_genai:gemini-3.7-flash",
-            "google_genai:gemini-3.6-flash",
-            "google_genai:gemini-3.5-flash",
-            "google_genai:gemini-2.5-flash",
-            "google_genai:gemma-4-31b-it",
-        ]
-    )
+    generator_fallbacks: list[str] | None = None
     model_options: dict[str, Any] = Field(default_factory=dict)
     language: str = "English"
     queries_per_tool: int = 10
@@ -38,6 +41,13 @@ class Settings(BaseModel):
     state_dir: Path = Path(".tooltangle")
     overrides_file: Path = Path("tooltangle.overrides.yaml")
     prices: dict[str, tuple[float, float]] = Field(default_factory=dict)
+
+    @property
+    def fallbacks(self) -> list[str]:
+        if self.generator_fallbacks is not None:
+            return self.generator_fallbacks
+        provider = provider_name(self.generator)
+        return [spec for spec in DEFAULT_FALLBACKS if provider_name(spec) == provider]
 
     @property
     def dataset_path(self) -> Path:
