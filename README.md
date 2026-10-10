@@ -1,17 +1,19 @@
-# tooltangle
+![tooltangle: find out which tools your LLM agent mixes up, and fix their descriptions with proof](https://raw.githubusercontent.com/bebz0/tooltangle/main/assets/tooltangle-banner.svg)
 
+[![PyPI](https://img.shields.io/pypi/v/tooltangle)](https://pypi.org/project/tooltangle/)
+[![Python](https://img.shields.io/pypi/pyversions/tooltangle)](https://pypi.org/project/tooltangle/)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/bebz0/tooltangle/blob/main/LICENSE)
-
-Find out which tools your LLM agent mixes up, and fix their descriptions with proof.
 
 Connect five MCP servers to an agent and the model is choosing between forty tools on every
 message. Each server's author tested their own tools, but nobody tested the mix you ended up
-with. tooltangle does: it writes realistic user messages for every tool, runs your model on
-them with all the tools attached, and shows which tools get confused with which. It can then
+with.
+
+tooltangle tests that mix. It writes realistic user messages for every tool, runs your model
+on them with all the tools attached, and shows which tools get confused with which. It can then
 rewrite the confusing descriptions, keeping a rewrite only if the model does measurably better
 on messages the rewrite was never shown.
 
-Part of a real run against the reference `time` server, which has just two tools:
+Here is part of a real run against the reference `time` server, which has just two tools:
 
 ```
 ERROR  time.convert_time → time.get_current_time  44% (7 of 16)
