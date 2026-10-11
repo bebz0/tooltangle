@@ -13,14 +13,11 @@ on them with all the tools attached, and shows which tools get confused with whi
 rewrite the confusing descriptions, keeping a rewrite only if the model does measurably better
 on messages the rewrite was never shown.
 
-Here is part of a real run against the reference `time` server, which has just two tools:
+Every check ends with a report. This one is a real run on the six support-agent tools from
+`examples/support_tools.py`: 5 of the 16 messages that needed a support ticket went to the
+help-center search instead.
 
-```
-ERROR  time.convert_time → time.get_current_time  44% (7 of 16)
-       e.g. "Our CEO wants to host an all-hands at 9:00 AM Eastern Time next Tuesday. What would that time correspond to in Dubai?"
-
-accuracy  0.82 [0.67, 0.91] on 38 messages with gemini-3.5-flash-lite
-```
+![tooltangle report: 92% accuracy on 126 messages, with create_ticket confused with search_help_center at the top of the findings](https://raw.githubusercontent.com/bebz0/tooltangle/main/assets/report.png)
 
 ## Install
 
