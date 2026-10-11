@@ -2,137 +2,379 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>tooltangle report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #222; max-width: 1000px; margin: 30px auto; padding: 0 20px; }
-  h1 { font-size: 22px; margin-bottom: 4px; }
-  h2 { font-size: 17px; margin-top: 36px; padding-bottom: 4px; border-bottom: 1px solid #ccc; }
-  table { border-collapse: collapse; width: 100%; }
-  th, td { border: 1px solid #ccc; padding: 5px 8px; text-align: left; vertical-align: top; }
-  th { background: #f0f0f0; font-weight: normal; }
-  td.num { text-align: right; white-space: nowrap; }
-  code { font-size: 13px; }
-  .summary { width: auto; }
-  .summary th { width: 110px; }
-  .findings { padding-left: 0; list-style: none; }
-  .findings li { margin-bottom: 10px; }
-  .error { color: #b00020; font-weight: bold; }
-  .warn { color: #9a5b00; font-weight: bold; }
-  .info { color: #1a5fb4; font-weight: bold; }
-  .detail { color: #666; }
-  .example { color: #666; margin: 2px 0 0 52px; }
-  .matrix { width: auto; }
-  .matrix td { text-align: center; min-width: 28px; }
-  .matrix th.col { writing-mode: vertical-rl; transform: rotate(180deg); text-align: left; }
-  .matrix td.wrong { background: #fbdada; }
-  .matrix td.right { background: #dff0df; }
-  .bad { color: #b00020; }
-  .ok { color: #1a7f37; }
-  .filters input[type=search] { width: 260px; padding: 4px; }
-  .filters label { margin-left: 12px; }
+  :root {
+    color-scheme: dark;
+    --page: #070b14;
+    --surface: #0d1424;
+    --surface-2: #131c31;
+    --border: rgba(140, 170, 255, 0.14);
+    --text: #eef3ff;
+    --text-2: #b3c0da;
+    --muted: #8090ae;
+    --accent: #3987e5;
+    --accent-light: #6da7ec;
+    --track: rgba(57, 135, 229, 0.2);
+    --neutral: #26324d;
+    --heat-1: #184f95;
+    --heat-2: #256abf;
+    --heat-3: #3987e5;
+    --heat-4: #6da7ec;
+    --heat-5: #9ec5f4;
+    --ink-on-light: #070b14;
+    --good: #0ca30c;
+    --warning: #fab219;
+    --critical: #d03b3b;
+    --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 14px/1.55 var(--sans);
+    color: var(--text);
+    background:
+      radial-gradient(1100px 480px at 15% -120px, rgba(57, 135, 229, 0.18), transparent 70%),
+      var(--page);
+    background-repeat: no-repeat;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 1120px; margin: 0 auto; padding: 36px 24px 64px; }
+  code, .mono { font-family: var(--mono); font-size: 12.5px; }
+  svg.icon { width: 14px; height: 14px; flex: none; }
+
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand svg { width: 34px; height: 34px; }
+  .wordmark { font-size: 20px; font-weight: 700; letter-spacing: -0.03em; }
+  .wordmark span { color: var(--accent-light); }
+  .tag { font: 500 11px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .meta { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
+  .chip { padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--text-2); background: var(--surface); }
+
+  .tiles { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .tile, .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
+  .tile { padding: 18px 20px; display: flex; flex-direction: column; }
+  .label { font: 500 11px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .value { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; margin-top: 6px; }
+  .hero .value { font-size: 64px; line-height: 1.05; letter-spacing: -0.04em; }
+  .unit { font-size: 0.5em; font-weight: 500; color: var(--text-2); margin-left: 2px; letter-spacing: 0; }
+  .sub { color: var(--muted); font-size: 13px; margin-top: auto; padding-top: 6px; }
+  .interval { margin-top: 14px; }
+  .interval .track { position: relative; height: 6px; border-radius: 3px; background: var(--track); }
+  .interval .band { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: var(--accent); }
+  .interval .point { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--text); box-shadow: 0 0 0 2px var(--surface); }
+  .interval .scale { display: flex; justify-content: space-between; margin-top: 8px; color: var(--muted); font-size: 12px; }
+
+  .card { padding: 22px 24px; margin-top: 12px; }
+  h2 { margin: 0 0 4px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+  .note { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+
+  .findings { list-style: none; margin: 12px 0 0; padding: 0; }
+  .findings li { display: flex; align-items: flex-start; gap: 14px; padding: 12px 0; border-top: 1px solid var(--border); }
+  .findings li:first-child { border-top: 0; padding-top: 4px; }
+  .sev { display: flex; align-items: center; gap: 6px; width: 76px; flex: none; font: 500 11px/22px var(--mono); letter-spacing: 0.08em; color: var(--text-2); }
+  .sev.error svg { color: var(--critical); }
+  .sev.warn svg { color: var(--warning); }
+  .sev.info svg { color: var(--accent-light); }
+  .finding-title { font-weight: 500; }
+  .detail { color: var(--text-2); margin-left: 8px; font-variant-numeric: tabular-nums; }
+  .example { color: var(--muted); margin-top: 2px; }
+
+  .scroll { overflow-x: auto; }
+  .legend { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 14px; color: var(--text-2); font-size: 12.5px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; }
+  .legend .ramp i { margin-right: -4px; }
+  .matrix { border-collapse: separate; border-spacing: 2px; }
+  .matrix th { font: 400 12px var(--mono); color: var(--text-2); white-space: nowrap; }
+  .matrix th.row { text-align: right; padding-right: 10px; }
+  .matrix th.col { vertical-align: bottom; padding-bottom: 8px; }
+  .matrix th.col span { display: inline-block; writing-mode: vertical-rl; transform: rotate(180deg); }
+  .matrix td { width: 36px; height: 32px; border-radius: 4px; text-align: center; font: 500 12.5px var(--sans); font-variant-numeric: tabular-nums; background: rgba(140, 170, 255, 0.04); }
+  .matrix td[data-count] { cursor: default; outline-offset: 1px; }
+  .matrix td[data-count]:hover, .matrix td[data-count]:focus { outline: 2px solid var(--text); }
+  .matrix td.same { background: var(--neutral); color: var(--text-2); }
+  .matrix td.heat-1 { background: var(--heat-1); color: var(--text); }
+  .matrix td.heat-2 { background: var(--heat-2); color: var(--text); }
+  .matrix td.heat-3 { background: var(--heat-3); color: var(--ink-on-light); }
+  .matrix td.heat-4 { background: var(--heat-4); color: var(--ink-on-light); }
+  .matrix td.heat-5 { background: var(--heat-5); color: var(--ink-on-light); }
+  #tip { position: absolute; z-index: 10; pointer-events: none; padding: 8px 12px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
+  #tip strong { display: block; color: var(--text); font-size: 13.5px; font-weight: 600; }
+
+  table.data { width: 100%; border-collapse: collapse; }
+  .data th { text-align: left; padding: 8px 12px; font: 500 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .data td { padding: 10px 12px; vertical-align: top; border-bottom: 1px solid var(--border); }
+  .data tr:last-child td { border-bottom: 0; }
+  .data tbody tr:hover td { background: rgba(140, 170, 255, 0.04); }
+  .data .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .data td.text { color: var(--text-2); }
+  .meter { display: inline-grid; grid-template-columns: 48px 64px 40px; align-items: center; gap: 8px; vertical-align: top; text-align: right; }
+  .meter .bar { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
+  .meter .bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+  .low { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; font: 500 11px var(--mono); color: var(--text-2); }
+  .low svg { color: var(--warning); }
+  .pick { display: flex; align-items: center; gap: 6px; }
+  .pick.right svg { color: var(--good); }
+  .pick.wrong svg { color: var(--critical); }
+  .pick.failed svg { color: var(--warning); }
+  small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+  .split { font: 400 12px var(--mono); color: var(--muted); }
+
+  .filters { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 12px 0 8px; color: var(--text-2); font-size: 13px; }
+  .filters input[type=search] { width: 280px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--page); color: var(--text); font: inherit; }
+  .filters input[type=search]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .filters label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .filters input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
+  #shown { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+  footer { margin-top: 28px; color: var(--muted); font-size: 12px; text-align: center; }
+
+  @media (max-width: 820px) {
+    .tiles { grid-template-columns: 1fr 1fr; }
+    .hero { grid-column: 1 / -1; }
+  }
 </style>
 </head>
 <body>
-<h1>tooltangle report</h1>
-<p>{{ report.model }}, {{ report.created_at }}</p>
+<svg width="0" height="0" style="position: absolute" aria-hidden="true">
+  <symbol id="icon-error" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M5.3 5.3l5.4 5.4M10.7 5.3l-5.4 5.4" stroke="#070b14" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="icon-warn" viewBox="0 0 16 16"><path d="M8 1.5l7 12.5H1z" fill="currentColor"/><path d="M8 6.2v3.6" stroke="#070b14" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="11.9" r="1" fill="#070b14"/></symbol>
+  <symbol id="icon-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M8 7.2v4.2" stroke="#070b14" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="4.7" r="1" fill="#070b14"/></symbol>
+  <symbol id="icon-right" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M4.8 8.3l2.2 2.2 4.2-4.6" fill="none" stroke="#070b14" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+{% set accuracy = report.accuracy * 100 %}
+{% set low = report.interval[0] * 100 %}
+{% set high = report.interval[1] * 100 %}
+<main>
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 120 120" role="img" aria-label="tooltangle">
+      <defs><mask id="under" maskUnits="userSpaceOnUse" x="0" y="0" width="120" height="120"><rect width="120" height="120" fill="#fff"/><path d="M26 84 C 60 84, 60 36, 94 36" fill="none" stroke="#000" stroke-width="21"/></mask></defs>
+      <path d="M26 36 C 60 36, 60 84, 94 84" fill="none" stroke="#eef3ff" stroke-width="11" stroke-linecap="round" mask="url(#under)"/>
+      <path d="M26 84 C 60 84, 60 36, 94 36" fill="none" stroke="#3987e5" stroke-width="11" stroke-linecap="round"/>
+      <circle cx="24" cy="36" r="12" fill="#eef3ff"/>
+      <circle cx="24" cy="84" r="12" fill="#3987e5"/>
+      <rect x="84" y="24" width="24" height="24" rx="6" fill="#3987e5"/>
+      <rect x="84" y="72" width="24" height="24" rx="6" fill="#eef3ff"/>
+    </svg>
+    <span class="wordmark">tool<span>tangle</span></span>
+    <span class="tag">report</span>
+  </div>
+  <div class="meta">
+    <span class="chip mono">{{ report.model }}</span>
+    <span>{{ report.created_at[:16]|replace("T", " ") }} UTC</span>
+  </div>
+</header>
 
-<table class="summary">
-  <tr><th>accuracy</th><td>{{ "%.2f"|format(report.accuracy) }} (95% interval {{ "%.2f"|format(report.interval[0]) }} to {{ "%.2f"|format(report.interval[1]) }})</td></tr>
-  <tr><th>messages</th><td>{{ report.evaluated }}{% if report.failed %}, {{ report.failed }} failed{% endif %}</td></tr>
-  <tr><th>tools</th><td>{{ report.tools|length }}</td></tr>
-  <tr><th>definitions</th><td>about {{ "{:,}".format(report.definition_tokens) }} tokens per request</td></tr>
-</table>
+<section class="tiles">
+  <div class="tile hero">
+    <div class="label">Accuracy</div>
+    <div class="value">{{ "%.0f"|format(accuracy) }}<span class="unit">%</span></div>
+    <div class="interval" role="img" aria-label="95% interval from {{ '%.0f'|format(low) }}% to {{ '%.0f'|format(high) }}%">
+      <div class="track">
+        <div class="band" style="left: {{ '%.1f'|format(low) }}%; width: {{ '%.1f'|format(high - low) }}%"></div>
+        <div class="point" style="left: {{ '%.1f'|format(accuracy) }}%"></div>
+      </div>
+      <div class="scale"><span>0</span><span>95% interval {{ "%.0f"|format(low) }}–{{ "%.0f"|format(high) }}%</span><span>100%</span></div>
+    </div>
+  </div>
+  <div class="tile">
+    <div class="label">Messages</div>
+    <div class="value">{{ "{:,}".format(report.evaluated) }}</div>
+    <div class="sub">{% if report.failed %}{{ report.failed }} more failed{% else %}all answered{% endif %}</div>
+  </div>
+  <div class="tile">
+    <div class="label">Tools</div>
+    <div class="value">{{ report.tools|length }}</div>
+    <div class="sub">seen by the model at once</div>
+  </div>
+  <div class="tile">
+    <div class="label">Definitions</div>
+    <div class="value">≈ {{ "{:,}".format(report.definition_tokens) }}</div>
+    <div class="sub">tokens on every request</div>
+  </div>
+</section>
 
-<h2>Findings</h2>
-<ul class="findings">
-  {% for finding in report.findings %}
-  <li>
-    <span class="{{ finding.severity }}">{{ finding.severity|upper }}</span>
-    {{ finding.title }}
-    {% if finding.detail %}<span class="detail">{{ finding.detail }}</span>{% endif %}
-    {% for example in finding.examples %}<div class="example">e.g. {{ example }}</div>{% endfor %}
-  </li>
-  {% else %}
-  <li>Nothing to report.</li>
-  {% endfor %}
-</ul>
+<section class="card">
+  <h2>Findings</h2>
+  <ul class="findings">
+    {% for finding in report.findings %}
+    <li>
+      <span class="sev {{ finding.severity }}"><svg class="icon"><use href="#icon-{{ finding.severity }}"/></svg>{{ finding.severity|upper }}</span>
+      <div>
+        <span class="finding-title">{{ finding.title }}</span>{% if finding.detail %}<span class="detail">{{ finding.detail }}</span>{% endif %}
+        {% for example in finding.examples %}<div class="example">e.g. {{ example }}</div>{% endfor %}
+      </div>
+    </li>
+    {% else %}
+    <li>Nothing to report.</li>
+    {% endfor %}
+  </ul>
+</section>
 
 {% if matrix.labels %}
-<h2>Confusion matrix</h2>
-<p>Rows: the tool a message was written for. Columns: the tool the model called.</p>
-<table class="matrix">
-  <tr>
-    <th></th>
-    {% for label in matrix.labels %}<th class="col">{{ label }}</th>{% endfor %}
-  </tr>
-  {% for expected in matrix.labels %}
-  <tr>
-    <th>{{ expected }}</th>
-    {% for picked in matrix.labels %}
-    {% set count = matrix.cells.get(expected ~ "|" ~ picked, 0) %}
-    <td class="{% if count %}{{ 'right' if expected == picked else 'wrong' }}{% endif %}">{{ count or "" }}</td>
-    {% endfor %}
-  </tr>
-  {% endfor %}
-</table>
+<section class="card">
+  <h2>Confusion matrix</h2>
+  <p class="note">Rows are the tool a message was written for, columns the tool the model called.</p>
+  <div class="legend">
+    <span><i style="background: var(--neutral)"></i>correct pick</span>
+    <span>fewer <span class="ramp">{% for step in range(1, 6) %}<i style="background: var(--heat-{{ step }})"></i>{% endfor %}</span> &nbsp;more confusions</span>
+  </div>
+  <div class="scroll">
+    <table class="matrix">
+      <tr>
+        <th></th>
+        {% for label in matrix.labels %}<th class="col"><span>{{ label }}</span></th>{% endfor %}
+      </tr>
+      {% for expected in matrix.labels %}
+      <tr>
+        <th class="row">{{ expected }}</th>
+        {% for picked in matrix.labels %}
+        {% set count = matrix.cells.get(expected ~ "|" ~ picked, 0) %}
+        {% if not count %}
+        <td></td>
+        {% elif expected == picked %}
+        <td class="same" tabindex="0" data-count="{{ count }}" data-expected="{{ expected }}" data-picked="{{ picked }}">{{ count }}</td>
+        {% else %}
+        <td class="heat-{{ ((count * 5) / matrix.peak)|round(0, 'ceil')|int }}" tabindex="0" data-count="{{ count }}" data-expected="{{ expected }}" data-picked="{{ picked }}">{{ count }}</td>
+        {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</section>
 {% endif %}
 
-<h2>Tools</h2>
-<table>
-  <tr><th>tool</th><th>messages</th><th>accuracy</th><th>precision</th><th>description</th></tr>
-  {% for key, tool in tools %}
-  <tr>
-    <td><code>{{ key }}</code></td>
-    <td class="num">{{ tool.queries }}</td>
-    <td class="num{% if tool.accuracy is not none and tool.accuracy < 0.8 %} bad{% endif %}">
-      {{ "%.0f%%"|format(tool.accuracy * 100) if tool.accuracy is not none else "-" }}
-    </td>
-    <td class="num">{{ "%.0f%%"|format(tool.precision * 100) if tool.precision is not none else "-" }}</td>
-    <td>{{ tool.description|truncate(160) }}</td>
-  </tr>
-  {% endfor %}
-</table>
+<section class="card">
+  <h2>Tools</h2>
+  <p class="note">Sorted from the least to the most accurate.</p>
+  <div class="scroll">
+    <table class="data">
+      <thead><tr><th>Tool</th><th class="num">Messages</th><th class="num">Accuracy</th><th class="num">Precision</th><th>Description</th></tr></thead>
+      <tbody>
+      {% for key, tool in tools %}
+      <tr>
+        <td><code>{{ key }}</code></td>
+        <td class="num">{{ tool.queries }}</td>
+        <td class="num">
+          {% if tool.accuracy is not none %}
+          <span class="meter">
+            <span class="low">{% if tool.accuracy < 0.8 %}<svg class="icon"><use href="#icon-warn"/></svg>low{% endif %}</span>
+            <span class="bar"><i style="width: {{ '%.0f'|format(tool.accuracy * 100) }}%"></i></span>
+            <span>{{ "%.0f%%"|format(tool.accuracy * 100) }}</span>
+          </span>
+          {% else %}-{% endif %}
+        </td>
+        <td class="num">{{ "%.0f%%"|format(tool.precision * 100) if tool.precision is not none else "-" }}</td>
+        <td class="text">{{ tool.description|truncate(160) }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
 
-<h2>Messages</h2>
-<p class="filters">
-  <input type="search" id="search" placeholder="filter">
-  <label><input type="checkbox" id="mistakes" checked> only mistakes</label>
-</p>
-<table id="messages">
-  <tr><th>message</th><th>written for</th><th>model called</th><th>split</th></tr>
-  {% for row in report.queries %}
-  <tr data-correct="{{ 'yes' if row.correct else 'no' }}">
-    <td>{{ row.text }}</td>
-    <td>
-      <code>{{ row.tool or "no tool" }}</code>
-      {% if row.accepted|length > 1 %}
-      <br><small>also fine: {{ row.accepted|reject("equalto", row.tool)|join(", ") }}</small>
-      {% endif %}
-    </td>
-    <td class="{{ 'ok' if row.correct else 'bad' }}"><code>{{ row.picked|pick }}</code></td>
-    <td>{{ row.split }}</td>
-  </tr>
-  {% endfor %}
-</table>
+<section class="card">
+  <h2>Messages</h2>
+  <div class="filters">
+    <input type="search" id="search" placeholder="Filter messages and tools" aria-label="Filter messages and tools">
+    <label><input type="checkbox" id="mistakes" checked> only mistakes</label>
+    <span id="shown"></span>
+  </div>
+  <div class="scroll">
+    <table class="data" id="messages">
+      <thead><tr><th>Message</th><th>Written for</th><th>Model called</th><th>Split</th></tr></thead>
+      <tbody>
+      {% for row in report.queries %}
+      <tr data-correct="{{ 'yes' if row.correct else 'no' }}">
+        <td>{{ row.text }}</td>
+        <td>
+          <code>{{ row.tool or "no tool" }}</code>
+          {% if row.accepted|length > 1 %}
+          <small>also fine: {{ row.accepted|reject("equalto", row.tool)|join(", ") }}</small>
+          {% endif %}
+        </td>
+        <td>
+          {% if row.error %}
+          <span class="pick failed"><svg class="icon"><use href="#icon-warn"/></svg>request failed</span>
+          {% elif row.correct %}
+          <span class="pick right"><svg class="icon"><use href="#icon-right"/></svg><code>{{ row.picked|pick }}</code></span>
+          {% else %}
+          <span class="pick wrong"><svg class="icon"><use href="#icon-error"/></svg><code>{{ row.picked|pick }}</code></span>
+          {% endif %}
+        </td>
+        <td class="split">{{ row.split }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>tooltangle · the same data is in report.json next to this file</footer>
+</main>
+<div id="tip" hidden></div>
 
 <script>
-  var search = document.getElementById("search");
-  var mistakes = document.getElementById("mistakes");
+  const search = document.getElementById("search");
+  const mistakes = document.getElementById("mistakes");
+  const shown = document.getElementById("shown");
+  const rows = Array.from(document.querySelectorAll("#messages tbody tr"));
 
   function filter() {
-    var text = search.value.toLowerCase();
-    var rows = document.querySelectorAll("#messages tr[data-correct]");
-    for (var i = 0; i < rows.length; i++) {
-      var row = rows[i];
-      var hide = (mistakes.checked && row.dataset.correct === "yes")
-        || row.textContent.toLowerCase().indexOf(text) === -1;
+    const text = search.value.toLowerCase();
+    let visible = 0;
+    for (const row of rows) {
+      const hide = (mistakes.checked && row.dataset.correct === "yes")
+        || !row.textContent.toLowerCase().includes(text);
       row.style.display = hide ? "none" : "";
+      if (!hide) visible += 1;
     }
+    shown.textContent = visible + " of " + rows.length + " shown";
   }
 
   search.addEventListener("input", filter);
   mistakes.addEventListener("change", filter);
   filter();
+
+  const tip = document.getElementById("tip");
+
+  function line(text) {
+    const element = document.createElement("div");
+    element.textContent = text;
+    return element;
+  }
+
+  function showTip(cell) {
+    const count = cell.dataset.count;
+    const value = document.createElement("strong");
+    value.textContent = count + (count === "1" ? " message" : " messages");
+    tip.replaceChildren(
+      value,
+      line("written for " + cell.dataset.expected),
+      line("model called " + cell.dataset.picked)
+    );
+    tip.hidden = false;
+    const box = cell.getBoundingClientRect();
+    const left = box.left + box.width / 2 - tip.offsetWidth / 2 + window.scrollX;
+    tip.style.left = Math.max(8, left) + "px";
+    tip.style.top = box.top + window.scrollY - tip.offsetHeight - 8 + "px";
+  }
+
+  for (const cell of document.querySelectorAll(".matrix td[data-count]")) {
+    cell.addEventListener("pointerenter", () => showTip(cell));
+    cell.addEventListener("focus", () => showTip(cell));
+    cell.addEventListener("pointerleave", () => { tip.hidden = true; });
+    cell.addEventListener("blur", () => { tip.hidden = true; });
+  }
 </script>
 </body>
 </html>

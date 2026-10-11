@@ -89,9 +89,11 @@ def confusion_matrix(report: dict[str, Any]) -> dict[str, Any]:
         if expected in labels and picked in labels:
             cells[(expected, picked)] += 1
 
+    wrong = [count for (expected, picked), count in cells.items() if expected != picked]
     return {
         "labels": labels,
         "cells": {f"{expected}|{picked}": count for (expected, picked), count in cells.items()},
+        "peak": max(wrong, default=1),
     }
 
 
