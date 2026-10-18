@@ -7,226 +7,179 @@
 <title>tooltangle report</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
 <style>
   :root {
     color-scheme: dark;
-    --page: #070b14;
-    --surface: #0d1424;
-    --surface-2: #131c31;
-    --border: rgba(140, 170, 255, 0.14);
-    --text: #eef3ff;
-    --text-2: #b3c0da;
-    --muted: #8090ae;
+    --bg: #09090b;
+    --raised: #131316;
+    --line: #232327;
+    --text: #fafafa;
+    --text-2: #a1a1aa;
+    --muted: #8a8a93;
     --accent: #3987e5;
-    --accent-light: #6da7ec;
-    --track: rgba(57, 135, 229, 0.2);
-    --neutral: #26324d;
+    --track: rgba(57, 135, 229, 0.18);
+    --cell: rgba(255, 255, 255, 0.035);
+    --same: #26262b;
     --heat-1: #184f95;
     --heat-2: #256abf;
     --heat-3: #3987e5;
     --heat-4: #6da7ec;
     --heat-5: #9ec5f4;
-    --ink-on-light: #070b14;
     --good: #0ca30c;
     --warning: #fab219;
     --critical: #d03b3b;
-    --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: Geist, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font: 14px/1.55 var(--sans);
-    color: var(--text);
-    background:
-      radial-gradient(1100px 480px at 15% -120px, rgba(57, 135, 229, 0.18), transparent 70%),
-      var(--page);
-    background-repeat: no-repeat;
-    -webkit-font-smoothing: antialiased;
-  }
-  main { max-width: 1120px; margin: 0 auto; padding: 36px 24px 64px; }
+  html { background: var(--bg); }
+  body { margin: 0; font: 14px/1.6 var(--sans); color: var(--text); -webkit-font-smoothing: antialiased; }
+  main { max-width: 880px; margin: 0 auto; padding: 56px 24px 96px; }
   code, .mono { font-family: var(--mono); font-size: 12.5px; }
-  svg.icon { width: 14px; height: 14px; flex: none; }
+  .muted { color: var(--muted); }
 
-  .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
-  .brand { display: flex; align-items: center; gap: 12px; }
-  .brand svg { width: 34px; height: 34px; }
-  .wordmark { font-size: 20px; font-weight: 700; letter-spacing: -0.03em; }
-  .wordmark span { color: var(--accent-light); }
-  .tag { font: 500 11px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
-  .meta { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
-  .chip { padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--text-2); background: var(--surface); }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
+  .name { color: var(--text); font-weight: 600; letter-spacing: -0.01em; }
 
-  .tiles { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-  .tile, .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
-  .tile { padding: 18px 20px; display: flex; flex-direction: column; }
-  .label { font: 500 11px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
-  .value { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; margin-top: 6px; }
-  .hero .value { font-size: 64px; line-height: 1.05; letter-spacing: -0.04em; }
-  .unit { font-size: 0.5em; font-weight: 500; color: var(--text-2); margin-left: 2px; letter-spacing: 0; }
-  .sub { color: var(--muted); font-size: 13px; margin-top: auto; padding-top: 6px; }
-  .interval { margin-top: 14px; }
-  .interval .track { position: relative; height: 6px; border-radius: 3px; background: var(--track); }
-  .interval .band { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: var(--accent); }
-  .interval .point { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--text); box-shadow: 0 0 0 2px var(--surface); }
-  .interval .scale { display: flex; justify-content: space-between; margin-top: 8px; color: var(--muted); font-size: 12px; }
+  .hero { padding: 72px 0 8px; }
+  .big { font-size: 96px; line-height: 1; font-weight: 600; letter-spacing: -0.055em; }
+  .big span { font-size: 0.45em; font-weight: 500; letter-spacing: -0.02em; color: var(--text-2); margin-left: 4px; }
+  .lede { margin: 14px 0 28px; font-size: 17px; color: var(--text-2); }
+  .range { display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 13px; }
+  .track { position: relative; width: 240px; height: 4px; border-radius: 2px; background: var(--track); }
+  .band { position: absolute; top: 0; bottom: 0; border-radius: 2px; background: var(--accent); }
+  .point { position: absolute; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: var(--text); box-shadow: 0 0 0 2px var(--bg); }
+  .facts { display: flex; flex-wrap: wrap; gap: 6px 28px; margin: 40px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; }
+  .facts b { color: var(--text); font-weight: 500; font-size: 15px; margin-right: 6px; font-variant-numeric: tabular-nums; }
 
-  .card { padding: 22px 24px; margin-top: 12px; }
-  h2 { margin: 0 0 4px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
-  .note { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+  section.part { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line); }
+  h2 { margin: 0 0 20px; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  h2 .count { color: var(--muted); font-weight: 400; margin-left: 6px; }
+  .note { margin: -12px 0 24px; color: var(--muted); font-size: 13px; }
 
-  .findings { list-style: none; margin: 12px 0 0; padding: 0; }
-  .findings li { display: flex; align-items: flex-start; gap: 14px; padding: 12px 0; border-top: 1px solid var(--border); }
-  .findings li:first-child { border-top: 0; padding-top: 4px; }
-  .sev { display: flex; align-items: center; gap: 6px; width: 76px; flex: none; font: 500 11px/22px var(--mono); letter-spacing: 0.08em; color: var(--text-2); }
-  .sev.error svg { color: var(--critical); }
-  .sev.warn svg { color: var(--warning); }
-  .sev.info svg { color: var(--accent-light); }
-  .finding-title { font-weight: 500; }
-  .detail { color: var(--text-2); margin-left: 8px; font-variant-numeric: tabular-nums; }
-  .example { color: var(--muted); margin-top: 2px; }
+  .findings { list-style: none; margin: 0; padding: 0; }
+  .findings li { display: grid; grid-template-columns: 88px 1fr; gap: 16px; padding: 14px 0; }
+  .findings li + li { border-top: 1px solid var(--line); }
+  .sev { display: inline-flex; align-items: center; gap: 8px; align-self: start; color: var(--text-2); font-size: 13px; line-height: 22px; }
+  .sev::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .sev.error::before { background: var(--critical); }
+  .sev.warn::before { background: var(--warning); border-radius: 1px; transform: rotate(45deg); }
+  .sev.info::before { background: var(--accent); }
+  .what { margin: 0; }
+  .what .detail { color: var(--muted); margin-left: 8px; font-variant-numeric: tabular-nums; }
+  .example { margin: 4px 0 0; color: var(--muted); }
 
   .scroll { overflow-x: auto; }
-  .legend { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 14px; color: var(--text-2); font-size: 12.5px; }
-  .legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; }
-  .legend .ramp i { margin-right: -4px; }
-  .matrix { border-collapse: separate; border-spacing: 2px; }
-  .matrix th { font: 400 12px var(--mono); color: var(--text-2); white-space: nowrap; }
-  .matrix th.row { text-align: right; padding-right: 10px; }
-  .matrix th.col { vertical-align: bottom; padding-bottom: 8px; }
+  .matrix { border-collapse: separate; border-spacing: 3px; }
+  .matrix th { font: 400 11.5px var(--mono); color: var(--text-2); white-space: nowrap; }
+  .matrix th.row { text-align: right; padding-right: 12px; }
+  .matrix th.col { vertical-align: bottom; padding-bottom: 10px; }
   .matrix th.col span { display: inline-block; writing-mode: vertical-rl; transform: rotate(180deg); }
-  .matrix td { width: 36px; height: 32px; border-radius: 4px; text-align: center; font: 500 12.5px var(--sans); font-variant-numeric: tabular-nums; background: rgba(140, 170, 255, 0.04); }
-  .matrix td[data-count] { cursor: default; outline-offset: 1px; }
-  .matrix td[data-count]:hover, .matrix td[data-count]:focus { outline: 2px solid var(--text); }
-  .matrix td.same { background: var(--neutral); color: var(--text-2); }
+  .matrix td { width: 30px; height: 28px; border-radius: 4px; background: var(--cell); text-align: center; font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .matrix td[data-count]:hover, .matrix td[data-count]:focus { outline: 1.5px solid var(--text); outline-offset: 1px; }
+  .matrix td.same { background: var(--same); color: var(--text-2); }
   .matrix td.heat-1 { background: var(--heat-1); color: var(--text); }
   .matrix td.heat-2 { background: var(--heat-2); color: var(--text); }
-  .matrix td.heat-3 { background: var(--heat-3); color: var(--ink-on-light); }
-  .matrix td.heat-4 { background: var(--heat-4); color: var(--ink-on-light); }
-  .matrix td.heat-5 { background: var(--heat-5); color: var(--ink-on-light); }
-  #tip { position: absolute; z-index: 10; pointer-events: none; padding: 8px 12px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
-  #tip strong { display: block; color: var(--text); font-size: 13.5px; font-weight: 600; }
+  .matrix td.heat-3 { background: var(--heat-3); color: var(--bg); }
+  .matrix td.heat-4 { background: var(--heat-4); color: var(--bg); }
+  .matrix td.heat-5 { background: var(--heat-5); color: var(--bg); }
+  .scale { display: flex; align-items: center; gap: 8px; margin-top: 16px; color: var(--muted); font-size: 12.5px; }
+  .scale i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+  .scale .gap { width: 16px; }
+  #tip { position: absolute; z-index: 10; pointer-events: none; padding: 8px 12px; border-radius: 8px; background: var(--raised); border: 1px solid var(--line); font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
+  #tip strong { display: block; color: var(--text); font-weight: 600; }
 
-  table.data { width: 100%; border-collapse: collapse; }
-  .data th { text-align: left; padding: 8px 12px; font: 500 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
-  .data td { padding: 10px 12px; vertical-align: top; border-bottom: 1px solid var(--border); }
-  .data tr:last-child td { border-bottom: 0; }
-  .data tbody tr:hover td { background: rgba(140, 170, 255, 0.04); }
-  .data .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .data td.text { color: var(--text-2); }
-  .meter { display: inline-grid; grid-template-columns: 48px 64px 40px; align-items: center; gap: 8px; vertical-align: top; text-align: right; }
-  .meter .bar { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
-  .meter .bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
-  .low { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; font: 500 11px var(--mono); color: var(--text-2); }
-  .low svg { color: var(--warning); }
-  .pick { display: flex; align-items: center; gap: 6px; }
-  .pick.right svg { color: var(--good); }
-  .pick.wrong svg { color: var(--critical); }
-  .pick.failed svg { color: var(--warning); }
-  small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
-  .split { font: 400 12px var(--mono); color: var(--muted); }
+  table.tools { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .tools th { text-align: left; padding: 0 0 10px; font-size: 12.5px; font-weight: 400; color: var(--muted); }
+  .tools td { padding: 12px 0; border-top: 1px solid var(--line); vertical-align: top; line-height: 22px; }
+  .tools .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tools .desc { display: block; color: var(--muted); font-size: 12.5px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meter { display: inline-flex; align-items: center; justify-content: flex-end; gap: 10px; height: 22px; vertical-align: top; }
+  .meter .bar { width: 72px; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
+  .meter .bar i { display: block; height: 100%; border-radius: 2px; background: var(--accent); }
+  .meter.low .bar i { background: var(--warning); }
+  .meter .value { width: 40px; }
+  .flag { display: block; color: var(--muted); font-size: 12px; line-height: 20px; }
 
-  .filters { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 12px 0 8px; color: var(--text-2); font-size: 13px; }
-  .filters input[type=search] { width: 280px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--page); color: var(--text); font: inherit; }
-  .filters input[type=search]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .filters label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-  .filters input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
-  #shown { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
-  footer { margin-top: 28px; color: var(--muted); font-size: 12px; text-align: center; }
+  .toolbar { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 8px; }
+  #search { flex: 1; min-width: 200px; max-width: 360px; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); color: var(--text); font: inherit; }
+  #search::placeholder { color: var(--muted); }
+  #search:focus { outline: none; border-color: var(--accent); }
+  .switch { display: inline-flex; align-items: center; gap: 10px; color: var(--text-2); font-size: 13px; cursor: pointer; user-select: none; }
+  .switch input { appearance: none; margin: 0; width: 30px; height: 18px; border-radius: 9px; background: var(--line); position: relative; cursor: pointer; transition: background 0.15s; }
+  .switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--text); transition: transform 0.15s; }
+  .switch input:checked { background: var(--accent); }
+  .switch input:checked::after { transform: translateX(12px); }
+  .switch input:focus-visible { outline: 1.5px solid var(--text); outline-offset: 2px; }
+  #shown { margin-left: auto; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .messages { list-style: none; margin: 0; padding: 0; }
+  .messages li { padding: 14px 0; border-top: 1px solid var(--line); }
+  .messages p { margin: 0; }
+  .route { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; color: var(--muted); font-size: 12.5px; }
+  .route::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--good); flex: none; }
+  .route.wrong::before { background: var(--critical); }
+  .route.failed::before { background: var(--warning); border-radius: 1px; transform: rotate(45deg); }
+  .route code { color: var(--text-2); }
+  .route .split { margin-left: auto; }
 
-  @media (max-width: 820px) {
-    .tiles { grid-template-columns: 1fr 1fr; }
-    .hero { grid-column: 1 / -1; }
+  footer { margin-top: 72px; color: var(--muted); font-size: 12.5px; }
+
+  @media (max-width: 640px) {
+    .big { font-size: 72px; }
+    .findings li { grid-template-columns: 1fr; gap: 4px; }
+    .track { width: 160px; }
   }
 </style>
 </head>
 <body>
-<svg width="0" height="0" style="position: absolute" aria-hidden="true">
-  <symbol id="icon-error" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M5.3 5.3l5.4 5.4M10.7 5.3l-5.4 5.4" stroke="#070b14" stroke-width="1.8" stroke-linecap="round"/></symbol>
-  <symbol id="icon-warn" viewBox="0 0 16 16"><path d="M8 1.5l7 12.5H1z" fill="currentColor"/><path d="M8 6.2v3.6" stroke="#070b14" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="11.9" r="1" fill="#070b14"/></symbol>
-  <symbol id="icon-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M8 7.2v4.2" stroke="#070b14" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="4.7" r="1" fill="#070b14"/></symbol>
-  <symbol id="icon-right" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M4.8 8.3l2.2 2.2 4.2-4.6" fill="none" stroke="#070b14" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-</svg>
 {% set accuracy = report.accuracy * 100 %}
 {% set low = report.interval[0] * 100 %}
 {% set high = report.interval[1] * 100 %}
 <main>
-<header class="top">
-  <div class="brand">
-    <svg viewBox="0 0 120 120" role="img" aria-label="tooltangle">
-      <defs><mask id="under" maskUnits="userSpaceOnUse" x="0" y="0" width="120" height="120"><rect width="120" height="120" fill="#fff"/><path d="M26 84 C 60 84, 60 36, 94 36" fill="none" stroke="#000" stroke-width="21"/></mask></defs>
-      <path d="M26 36 C 60 36, 60 84, 94 84" fill="none" stroke="#eef3ff" stroke-width="11" stroke-linecap="round" mask="url(#under)"/>
-      <path d="M26 84 C 60 84, 60 36, 94 36" fill="none" stroke="#3987e5" stroke-width="11" stroke-linecap="round"/>
-      <circle cx="24" cy="36" r="12" fill="#eef3ff"/>
-      <circle cx="24" cy="84" r="12" fill="#3987e5"/>
-      <rect x="84" y="24" width="24" height="24" rx="6" fill="#3987e5"/>
-      <rect x="84" y="72" width="24" height="24" rx="6" fill="#eef3ff"/>
-    </svg>
-    <span class="wordmark">tool<span>tangle</span></span>
-    <span class="tag">report</span>
-  </div>
-  <div class="meta">
-    <span class="chip mono">{{ report.model }}</span>
-    <span>{{ report.created_at[:16]|replace("T", " ") }} UTC</span>
-  </div>
+<header>
+  <div><span class="name">tooltangle</span> &nbsp;report</div>
+  <div><span class="mono">{{ report.model }}</span> &nbsp;·&nbsp; {{ report.created_at[:16]|replace("T", " ") }} UTC</div>
 </header>
 
-<section class="tiles">
-  <div class="tile hero">
-    <div class="label">Accuracy</div>
-    <div class="value">{{ "%.0f"|format(accuracy) }}<span class="unit">%</span></div>
-    <div class="interval" role="img" aria-label="95% interval from {{ '%.0f'|format(low) }}% to {{ '%.0f'|format(high) }}%">
-      <div class="track">
-        <div class="band" style="left: {{ '%.1f'|format(low) }}%; width: {{ '%.1f'|format(high - low) }}%"></div>
-        <div class="point" style="left: {{ '%.1f'|format(accuracy) }}%"></div>
-      </div>
-      <div class="scale"><span>0</span><span>95% interval {{ "%.0f"|format(low) }}–{{ "%.0f"|format(high) }}%</span><span>100%</span></div>
+<section class="hero">
+  <div class="big">{{ "%.0f"|format(accuracy) }}<span>%</span></div>
+  <p class="lede">of {{ "{:,}".format(report.evaluated) }} test messages went to the right tool.</p>
+  <div class="range" role="img" aria-label="95% interval from {{ '%.0f'|format(low) }}% to {{ '%.0f'|format(high) }}%">
+    <div class="track">
+      <div class="band" style="left: {{ '%.1f'|format(low) }}%; width: {{ '%.1f'|format(high - low) }}%"></div>
+      <div class="point" style="left: {{ '%.1f'|format(accuracy) }}%"></div>
     </div>
+    <span>95% interval {{ "%.0f"|format(low) }}–{{ "%.0f"|format(high) }}%</span>
   </div>
-  <div class="tile">
-    <div class="label">Messages</div>
-    <div class="value">{{ "{:,}".format(report.evaluated) }}</div>
-    <div class="sub">{% if report.failed %}{{ report.failed }} more failed{% else %}all answered{% endif %}</div>
-  </div>
-  <div class="tile">
-    <div class="label">Tools</div>
-    <div class="value">{{ report.tools|length }}</div>
-    <div class="sub">seen by the model at once</div>
-  </div>
-  <div class="tile">
-    <div class="label">Definitions</div>
-    <div class="value">≈ {{ "{:,}".format(report.definition_tokens) }}</div>
-    <div class="sub">tokens on every request</div>
-  </div>
+  <ul class="facts">
+    <li><b>{{ report.tools|length }}</b>tools</li>
+    <li><b>≈ {{ "{:,}".format(report.definition_tokens) }}</b>tokens on every request</li>
+    {% if report.failed %}<li><b>{{ report.failed }}</b>requests failed</li>{% endif %}
+  </ul>
 </section>
 
-<section class="card">
-  <h2>Findings</h2>
+<section class="part">
+  <h2>Findings<span class="count">{{ report.findings|length }}</span></h2>
   <ul class="findings">
     {% for finding in report.findings %}
     <li>
-      <span class="sev {{ finding.severity }}"><svg class="icon"><use href="#icon-{{ finding.severity }}"/></svg>{{ finding.severity|upper }}</span>
+      <span class="sev {{ finding.severity }}">{{ {"error": "Error", "warn": "Warning", "info": "Info"}[finding.severity] }}</span>
       <div>
-        <span class="finding-title">{{ finding.title }}</span>{% if finding.detail %}<span class="detail">{{ finding.detail }}</span>{% endif %}
-        {% for example in finding.examples %}<div class="example">e.g. {{ example }}</div>{% endfor %}
+        <p class="what">{{ finding.title }}{% if finding.detail %}<span class="detail">{{ finding.detail }}</span>{% endif %}</p>
+        {% for example in finding.examples %}<p class="example">{{ example }}</p>{% endfor %}
       </div>
     </li>
     {% else %}
-    <li>Nothing to report.</li>
+    <li><span class="sev info">Info</span><p class="what">Nothing to report.</p></li>
     {% endfor %}
   </ul>
 </section>
 
 {% if matrix.labels %}
-<section class="card">
+<section class="part">
   <h2>Confusion matrix</h2>
   <p class="note">Rows are the tool a message was written for, columns the tool the model called.</p>
-  <div class="legend">
-    <span><i style="background: var(--neutral)"></i>correct pick</span>
-    <span>fewer <span class="ramp">{% for step in range(1, 6) %}<i style="background: var(--heat-{{ step }})"></i>{% endfor %}</span> &nbsp;more confusions</span>
-  </div>
   <div class="scroll">
     <table class="matrix">
       <tr>
@@ -250,76 +203,71 @@
       {% endfor %}
     </table>
   </div>
+  <div class="scale">
+    <i style="background: var(--same)"></i>correct
+    <span class="gap"></span>
+    {% for step in range(1, 6) %}<i style="background: var(--heat-{{ step }})"></i>{% endfor %}
+    fewer to more confusions
+  </div>
 </section>
 {% endif %}
 
-<section class="card">
-  <h2>Tools</h2>
-  <p class="note">Sorted from the least to the most accurate.</p>
-  <div class="scroll">
-    <table class="data">
-      <thead><tr><th>Tool</th><th class="num">Messages</th><th class="num">Accuracy</th><th class="num">Precision</th><th>Description</th></tr></thead>
-      <tbody>
-      {% for key, tool in tools %}
-      <tr>
-        <td><code>{{ key }}</code></td>
-        <td class="num">{{ tool.queries }}</td>
-        <td class="num">
-          {% if tool.accuracy is not none %}
-          <span class="meter">
-            <span class="low">{% if tool.accuracy < 0.8 %}<svg class="icon"><use href="#icon-warn"/></svg>low{% endif %}</span>
-            <span class="bar"><i style="width: {{ '%.0f'|format(tool.accuracy * 100) }}%"></i></span>
-            <span>{{ "%.0f%%"|format(tool.accuracy * 100) }}</span>
-          </span>
-          {% else %}-{% endif %}
-        </td>
-        <td class="num">{{ "%.0f%%"|format(tool.precision * 100) if tool.precision is not none else "-" }}</td>
-        <td class="text">{{ tool.description|truncate(160) }}</td>
-      </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
+<section class="part">
+  <h2>Tools<span class="count">{{ tools|length }}</span></h2>
+  <table class="tools">
+    <colgroup><col><col style="width: 170px"><col style="width: 90px"><col style="width: 90px"></colgroup>
+    <thead><tr><th>Tool</th><th class="num">Accuracy</th><th class="num">Precision</th><th class="num">Messages</th></tr></thead>
+    <tbody>
+    {% for key, tool in tools %}
+    <tr>
+      <td>
+        <code>{{ key }}</code>
+        <span class="desc" title="{{ tool.description }}">{{ tool.description or "no description" }}</span>
+      </td>
+      <td class="num">
+        {% if tool.accuracy is not none %}
+        <span class="meter{% if tool.accuracy < 0.8 %} low{% endif %}">
+          <span class="bar"><i style="width: {{ '%.0f'|format(tool.accuracy * 100) }}%"></i></span>
+          <span class="value">{{ "%.0f%%"|format(tool.accuracy * 100) }}</span>
+        </span>
+        {% if tool.accuracy < 0.8 %}<span class="flag">below 80%</span>{% endif %}
+        {% else %}<span class="muted">–</span>{% endif %}
+      </td>
+      <td class="num">{{ "%.0f%%"|format(tool.precision * 100) if tool.precision is not none else "–" }}</td>
+      <td class="num">{{ tool.queries }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
 </section>
 
-<section class="card">
-  <h2>Messages</h2>
-  <div class="filters">
+<section class="part">
+  <h2>Messages<span class="count">{{ report.queries|length }}</span></h2>
+  <div class="toolbar">
     <input type="search" id="search" placeholder="Filter messages and tools" aria-label="Filter messages and tools">
-    <label><input type="checkbox" id="mistakes" checked> only mistakes</label>
+    <label class="switch"><input type="checkbox" id="mistakes" checked> Only mistakes</label>
     <span id="shown"></span>
   </div>
-  <div class="scroll">
-    <table class="data" id="messages">
-      <thead><tr><th>Message</th><th>Written for</th><th>Model called</th><th>Split</th></tr></thead>
-      <tbody>
-      {% for row in report.queries %}
-      <tr data-correct="{{ 'yes' if row.correct else 'no' }}">
-        <td>{{ row.text }}</td>
-        <td>
-          <code>{{ row.tool or "no tool" }}</code>
-          {% if row.accepted|length > 1 %}
-          <small>also fine: {{ row.accepted|reject("equalto", row.tool)|join(", ") }}</small>
-          {% endif %}
-        </td>
-        <td>
-          {% if row.error %}
-          <span class="pick failed"><svg class="icon"><use href="#icon-warn"/></svg>request failed</span>
-          {% elif row.correct %}
-          <span class="pick right"><svg class="icon"><use href="#icon-right"/></svg><code>{{ row.picked|pick }}</code></span>
-          {% else %}
-          <span class="pick wrong"><svg class="icon"><use href="#icon-error"/></svg><code>{{ row.picked|pick }}</code></span>
-          {% endif %}
-        </td>
-        <td class="split">{{ row.split }}</td>
-      </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  <ul class="messages" id="messages">
+    {% for row in report.queries %}
+    <li data-correct="{{ 'yes' if row.correct else 'no' }}">
+      <p>{{ row.text }}</p>
+      <div class="route {{ 'failed' if row.error else ('right' if row.correct else 'wrong') }}">
+        <span>for <code>{{ row.tool or "no tool" }}</code></span>
+        {% if row.error %}
+        <span>· request failed</span>
+        {% else %}
+        <span>· called <code>{{ row.picked|pick }}</code></span>
+        {% endif %}
+        {% if row.accepted|length > 1 %}<span>· also fine: {{ row.accepted|reject("equalto", row.tool)|join(", ") }}</span>{% endif %}
+        <span class="split">{{ row.split }}</span>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
 </section>
 
-<footer>tooltangle · the same data is in report.json next to this file</footer>
+<footer>The same data is in report.json next to this file.</footer>
 </main>
 <div id="tip" hidden></div>
 
@@ -327,7 +275,7 @@
   const search = document.getElementById("search");
   const mistakes = document.getElementById("mistakes");
   const shown = document.getElementById("shown");
-  const rows = Array.from(document.querySelectorAll("#messages tbody tr"));
+  const rows = Array.from(document.querySelectorAll("#messages li"));
 
   function filter() {
     const text = search.value.toLowerCase();
@@ -335,10 +283,10 @@
     for (const row of rows) {
       const hide = (mistakes.checked && row.dataset.correct === "yes")
         || !row.textContent.toLowerCase().includes(text);
-      row.style.display = hide ? "none" : "";
+      row.hidden = hide;
       if (!hide) visible += 1;
     }
-    shown.textContent = visible + " of " + rows.length + " shown";
+    shown.textContent = visible + " of " + rows.length;
   }
 
   search.addEventListener("input", filter);
