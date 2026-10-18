@@ -24,6 +24,7 @@ logging.getLogger("langchain_google_genai._function_utils").setLevel(logging.ERR
 logging.getLogger("google_genai.models").setLevel(logging.ERROR)
 
 PROVIDERS_WITH_RETRIES = {"google_genai", "openai", "anthropic"}
+REASONING_OPTIONS = {"thinking", "reasoning", "reasoning_effort"}
 UNITS = {"ms": 0.001, "s": 1, "m": 60, "h": 3600}
 
 
@@ -45,8 +46,10 @@ def create_model(spec: str, **options: Any) -> BaseChatModel:
         options.setdefault("max_retries", 2)
     try:
         model: BaseChatModel = init_chat_model(spec, **options)
-        # the profile says whether this model accepts a temperature at all
-        if "temperature" not in options and (model.profile or {}).get("temperature", True):
+        # the profile says whether this model accepts a temperature at all, and a model that
+        # is asked to think only takes its default one
+        settable = "temperature" not in options and not REASONING_OPTIONS & options.keys()
+        if settable and (model.profile or {}).get("temperature", True):
             model = init_chat_model(spec, **options, temperature=0)
     except ImportError as error:
         if provider in (metadata("tooltangle").get_all("Provides-Extra") or []):
@@ -126,7 +129,6 @@ class RateLimit:
     retry_after: float | None
     limit: int | None
     per_day: bool
-    out_of_credit: bool = False
 
 
 def status_code(error: Exception) -> int | None:
@@ -167,12 +169,20 @@ def parse_rate_limit(error: Exception) -> RateLimit | None:
         or re.search(r"limit: (\d+)", text)
         or re.search(r"requests per min \(RPM\): Limit (\d+)", text)
     )
-    code = getattr(error, "code", None)
     return RateLimit(
         retry_after=retry_after(error, text),
         limit=int(limit.group(1)) if limit else None,
         per_day=bool(re.search(r"PerDay|per day|\b[RT]PD\b", text)),
-        out_of_credit=code == "insufficient_quota" or "insufficient_quota" in text,
+    )
+
+
+def out_of_credit(error: Exception) -> bool:
+    text = str(error)
+    return (
+        status_code(error) == 402
+        or getattr(error, "code", None) == "insufficient_quota"
+        or "insufficient_quota" in text
+        or "credit balance is too low" in text
     )
 
 
@@ -294,13 +304,13 @@ class ModelClient:
                 return result, time.perf_counter() - started
             except Exception as error:
                 last_error = error
+                if out_of_credit(error):
+                    raise QuotaExhausted(
+                        f"the account behind {self.spec} is out of credit; finished calls "
+                        "are cached, so add credit or pick another model"
+                    ) from error
                 limit = parse_rate_limit(error)
                 if limit is not None:
-                    if limit.out_of_credit:
-                        raise QuotaExhausted(
-                            f"the account behind {self.spec} is out of credit; finished calls "
-                            "are cached, so add credit or pick another model"
-                        ) from error
                     if limit.per_day:
                         per_day = f" ({limit.limit} requests per day)" if limit.limit else ""
                         raise QuotaExhausted(

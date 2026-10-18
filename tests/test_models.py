@@ -106,8 +106,15 @@ async def test_daily_quota_stops_immediately():
     assert runnable.calls == 1
 
 
-async def test_an_account_without_credit_stops_immediately():
-    error = APIError("You exceeded your current quota", 429, code="insufficient_quota")
+@pytest.mark.parametrize(
+    "error",
+    [
+        APIError("You exceeded your current quota", 429, code="insufficient_quota"),
+        APIError("Your credit balance is too low to access the Anthropic API.", 400),
+        APIError("Insufficient credits", 402),
+    ],
+)
+async def test_an_account_without_credit_stops_immediately(error):
     runnable = FlakyRunnable([error])
     with pytest.raises(QuotaExhausted, match="out of credit"):
         await make_client().invoke(runnable, [])
@@ -144,6 +151,8 @@ def test_temperature_is_zero_unless_the_model_rejects_it(monkeypatch):
     assert created[-1] == {}
     create_model("fake:plain", temperature=0.7)
     assert created[-1] == {"temperature": 0.7}
+    create_model("fake:plain", thinking={"type": "enabled", "budget_tokens": 1024})
+    assert created[-1] == {"thinking": {"type": "enabled", "budget_tokens": 1024}}
 
 
 def test_prices_come_from_the_settings_first_then_from_the_price_list():

@@ -47,6 +47,9 @@ tooltangle = "tooltangle.cli:app"
 openai = [
     "langchain-openai>=1.7.0",
 ]
+anthropic = [
+    "langchain-anthropic>=1.7.6",
+]
 
 [build-system]
 requires = ["uv_build>=0.12.7,<0.13.0"]
