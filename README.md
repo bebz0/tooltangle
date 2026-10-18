@@ -13,11 +13,14 @@ on them with all the tools attached, and shows which tools get confused with whi
 rewrite the confusing descriptions, keeping a rewrite only if the model does measurably better
 on messages the rewrite was never shown.
 
-Every check ends with a report. This one is a real run on the six support-agent tools from
-`examples/support_tools.py`: 5 of the 16 messages that needed a support ticket went to the
-help-center search instead.
+Here is part of a real run against the reference `time` server, which has just two tools:
 
-![tooltangle report: 92% accuracy on 126 messages, with create_ticket confused with search_help_center at the top of the findings](https://raw.githubusercontent.com/bebz0/tooltangle/main/assets/report.png)
+```
+ERROR  time.convert_time → time.get_current_time  44% (7 of 16)
+       e.g. "Our CEO wants to host an all-hands at 9:00 AM Eastern Time next Tuesday. What would that time correspond to in Dubai?"
+
+accuracy  0.82 [0.67, 0.91] on 38 messages with gemini-3.5-flash-lite
+```
 
 ## Install
 
@@ -31,17 +34,19 @@ pip install tooltangle    # or install it into a project
 Set `GOOGLE_API_KEY` in your environment or in a `.env` file in the directory you run from.
 Gemini is the default because its free tier is enough to try the tool.
 
-To test OpenAI models, install the extra, set `OPENAI_API_KEY` and name the model:
+To test OpenAI or Anthropic models, install the matching extra, set `OPENAI_API_KEY` or
+`ANTHROPIC_API_KEY`, and name the model:
 
 ```bash
-pip install "tooltangle[openai]"
+pip install "tooltangle[openai]"        # or "tooltangle[anthropic]"
 tooltangle check mcp.json --model openai:gpt-5.4-mini
+tooltangle check mcp.json --model anthropic:claude-haiku-4-5
 ```
 
-The test messages are still written by Gemini unless you also pass
-`--generator openai:<model name>`. OpenAI support is new and not battle-tested yet. Other
-providers that LangChain supports can be tried the same way after installing their LangChain
-package, but they are untested.
+The test messages are still written by Gemini unless you also pass `--generator <model>`.
+Claude works well as the model under test but isn't recommended as the generator yet. Both
+integrations are new and not battle-tested. Other providers that LangChain supports can be
+tried the same way after installing their LangChain package, but they are untested.
 
 ## Usage
 
