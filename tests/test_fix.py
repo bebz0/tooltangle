@@ -3,7 +3,7 @@ from typer.testing import CliRunner
 
 from tooltangle.cli import app
 from tooltangle.fixer import DescriptionFix, NewDescription
-from tooltangle.overrides import load_overrides
+from tooltangle.overrides import fingerprint, load_overrides
 
 runner = CliRunner()
 
@@ -40,9 +40,12 @@ def test_fix_keeps_a_proven_rewrite(project, write_config, notes_server, use_fak
     result = runner.invoke(app, ["fix", config, "--yes"])
     assert result.exit_code == 0, result.stdout
     assert "✓ accepted" in result.stdout
-    assert load_overrides(project / "tooltangle.overrides.yaml") == {
-        ("notes", "search_notes"): GOOD_FIX
-    }
+    saved = load_overrides(project / "tooltangle.overrides.yaml")
+    assert list(saved) == [("notes", "search_notes")]
+    assert saved[("notes", "search_notes")].description == GOOD_FIX
+    assert saved[("notes", "search_notes")].replaces == fingerprint(
+        "Search the user's notes by keyword."
+    )
 
     after = runner.invoke(app, ["check", config, "--yes"])
     assert after.exit_code == 0, after.stdout

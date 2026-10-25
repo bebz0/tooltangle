@@ -11,12 +11,6 @@ from pathlib import Path
 from types import ModuleType
 from typing import IO, Any, TextIO
 
-import httpx
-from langchain_core.utils.function_calling import convert_to_openai_tool
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-from mcp.client.streamable_http import streamable_http_client
-
 from tooltangle.toolset import EMPTY_PARAMETERS, Toolset, ToolSpec
 
 KNOWN_CLIENTS = ("claude-desktop", "claude-code", "cursor", "vscode")
@@ -176,6 +170,11 @@ async def load_server(server: ServerConfig, timeout: float = 60) -> list[ToolSpe
 
 
 async def _list_tools(server: ServerConfig, errlog: TextIO) -> list[ToolSpec]:
+    import httpx
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+    from mcp.client.streamable_http import streamable_http_client
+
     async with AsyncExitStack() as stack:
         if server.transport == "stdio":
             assert server.command is not None  # parse_server guarantees it
@@ -234,6 +233,8 @@ def _tail(errlog: IO[str], lines: int = 3) -> str:
 
 
 def load_python_tools(target: str) -> list[ToolSpec]:
+    from langchain_core.utils.function_calling import convert_to_openai_tool
+
     module_path, _, attribute = target.rpartition(":")
     module = _import_module(module_path)
     try:

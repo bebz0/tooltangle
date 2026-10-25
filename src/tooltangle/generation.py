@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import re
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
@@ -22,6 +23,14 @@ NO_TOOL_BATCH = 25
 NO_TOOL_SHARE = 0.1
 PARROT_THRESHOLD = 0.6
 DUPLICATE_THRESHOLD = 0.85
+
+
+def names_the_tool(text: str, function: str) -> bool:
+    # a plain word like "search" or "add" is ordinary language in a message, only an
+    # identifier like "search_notes" or "searchNotes" gives the tool away
+    if not re.search(r"[_-]|[a-z][A-Z]", function):
+        return False
+    return re.search(rf"(?<![\w-]){re.escape(function)}(?![\w-])", text, re.IGNORECASE) is not None
 
 
 def similarity_to_references(texts: list[str], references: list[str]) -> list[float]:
@@ -305,7 +314,7 @@ class QueryGenerator:
             if not text or text.casefold() in seen:
                 report.dropped["duplicate"] += 1
                 continue
-            if draft.tool and self.function(draft.tool).casefold() in text.casefold():
+            if draft.tool and names_the_tool(text, self.function(draft.tool)):
                 report.dropped["names the tool"] += 1
                 continue
             seen.add(text.casefold())

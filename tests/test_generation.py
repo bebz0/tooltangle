@@ -1,10 +1,11 @@
 from fakes import FakeChatModel, fake_generator, requested_functions
 
 from tooltangle.dataset import Dataset
-from tooltangle.generation import QueryGenerator, plan_generation
+from tooltangle.generation import QueryGenerator, names_the_tool, plan_generation
 from tooltangle.models import ModelClient, UsageLog
 from tooltangle.settings import Settings
 from tooltangle.toolset import Toolset, ToolSpec
+from tooltangle.workspace import Workspace, prepare_dataset
 
 
 def make_toolset(*extra: ToolSpec) -> Toolset:
@@ -76,3 +77,29 @@ async def test_new_tool_only_generates_what_is_missing():
     assert any(query.tool == "mail.send_email" for query in updated.queries)
     old_splits = {query.id: query.split for query in dataset.queries}
     assert all(old_splits[q.id] == q.split for q in updated.queries if q.id in old_splits)
+
+
+async def test_removed_tool_drops_out_of_the_evaluation(tmp_path):
+    toolset = make_toolset()
+    generator, _ = make_generator(toolset)
+    dataset, _ = await generator.build(plan_generation(toolset, None))
+    settings = Settings(state_dir=tmp_path / ".tooltangle")
+    dataset.save(settings.dataset_path)
+
+    smaller = Toolset([tool for tool in toolset if tool.key != "notes.read_note"])
+    with Workspace(settings) as workspace:
+        used, report = await prepare_dataset(workspace, smaller)
+
+    assert report is None
+    assert all(query.tool in smaller for query in used.queries if query.tool)
+    assert all(key in smaller for query in used.queries for key in query.accepted)
+    saved = Dataset.load(settings.dataset_path)
+    assert any(query.tool == "notes.read_note" for query in saved.queries)
+
+
+def test_names_the_tool_only_for_identifiers():
+    assert names_the_tool("please run search_notes now", "search_notes")
+    assert names_the_tool("Use SearchNotes for this", "searchNotes")
+    assert not names_the_tool("search for cheap hotels in Rome", "search")
+    assert not names_the_tool("what is the address of the Louvre", "add")
+    assert not names_the_tool("check search_notes_v2 first", "search_notes")

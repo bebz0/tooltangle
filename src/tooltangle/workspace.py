@@ -106,7 +106,8 @@ async def prepare_dataset(
     existing = workspace.dataset()
     plan = plan_generation(toolset, existing)
     if existing is not None and plan.is_empty:
-        return existing, None
+        # the file keeps messages for tools that are gone, in case they come back
+        return existing.model_copy(update={"queries": plan.kept}), None
     generator = QueryGenerator(toolset, workspace.generator(), workspace.settings, on_call)
     dataset, report = await generator.build(plan)
     dataset.save(workspace.settings.dataset_path)
